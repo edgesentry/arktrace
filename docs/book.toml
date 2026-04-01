@@ -1,0 +1,13 @@
+[book]
+title = "capvista-mpol-analysis"
+description = "Maritime Pattern of Life analysis pipeline for shadow fleet candidate screening."
+authors = ["edgesentry contributors"]
+language = "en"
+src = "."
+
+[build]
+build-dir = "../target/book"
+
+[output.html]
+git-repository-url = "https://github.com/edgesentry/capvista-mpol-analysis"
+edit-url-template = "https://github.com/edgesentry/capvista-mpol-analysis/edit/main/docs/{path}"
