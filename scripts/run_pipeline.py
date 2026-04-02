@@ -302,18 +302,27 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int
         "--db", p.db_path,
         "--bbox", str(lat_min), str(lon_min), str(lat_max), str(lon_max),
     ]
+    def _stop_proc(proc: subprocess.Popen, label: str) -> None:
+        proc.send_signal(_signal.SIGINT)
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        print(f"      {label}  {_green('✓')}")
+
     proc = subprocess.Popen(cmd, env=os.environ.copy())
     try:
         proc.wait(timeout=stream_duration if stream_duration else None)
     except subprocess.TimeoutExpired:
-        proc.send_signal(_signal.SIGINT)
-        proc.wait()
-        print(f"      Streaming stopped after {stream_duration}s.  {_green('✓')}")
+        _stop_proc(proc, f"Streaming stopped after {stream_duration}s.")
         return True
     except KeyboardInterrupt:
-        proc.send_signal(_signal.SIGINT)
-        proc.wait()
-        print(f"      ^C  Ingestion stopped.  {_green('✓')}")
+        _stop_proc(proc, "^C  Ingestion stopped.")
         return True
 
     if proc.returncode == 0 or proc.returncode == -_signal.SIGINT:

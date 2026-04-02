@@ -143,8 +143,12 @@ async def stream(
         await ws.send(json.dumps(subscription))
         print(f"Subscribed — bbox {bbox}, batch_size={batch_size}, flush_interval={flush_interval}s")
 
-        async for raw in ws:
-            if stop_event.is_set():
+        while not stop_event.is_set():
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue
+            except websockets.ConnectionClosed:
                 break
 
             try:
