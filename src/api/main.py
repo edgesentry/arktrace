@@ -6,7 +6,6 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
 from src.api.routes.alerts import router as alerts_router
 from src.api.routes.vessels import router as vessels_router
