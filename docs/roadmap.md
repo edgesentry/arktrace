@@ -120,28 +120,6 @@
 
 ---
 
-## Dependency Graph
-
-```
-A1 (AIS ingestion)
-  └── A3 (feature engineering — behavioral)
-        └── A4 (scoring + watchlist)
-              └── A5 (validation + submission)
-
-A2 (sanctions + registry)
-  └── A3 (feature engineering — graph + identity)
-
-A4 ──► B1 (watchlist in edgesentry-app)
-B1 ──► B2 (Tier 1 camera)
-B1 ──► B3 (Tier 2 LiDAR)
-B2, B3 ──► B4 (evidence signing)
-B4 ──► B5 (VDES transmission)
-B5 ──► B6 (port dashboard)
-B6 ──► A4 (confirmed labels loop back to improve scoring)
-```
-
----
-
 ## Phase C — Pre-Submission Enhancements
 
 Work on Phase C items has begun in parallel with Phase A/B ahead of the 29 April 2026 Cap Vista submission. Items marked **In Progress** have open GitHub issues.
@@ -200,3 +178,32 @@ Quantify the causal link between sanction events and observable AIS behaviour:
 | Apr 29 | A5: Validate + submit proposal to Cap Vista | C1: targeted for submission alongside A5 |
 
 Phase B timeline depends on Cap Vista trial contract award (expected within 60 days of submission deadline).
+
+---
+
+## Dependency Graph
+
+```
+A1 (AIS ingestion)
+  └── A3 (feature engineering — behavioral)
+        └── A4 (scoring + watchlist)
+              └── A5 (validation + submission)
+
+A2 (sanctions + registry)
+  └── A3 (feature engineering — graph + identity)
+
+A4 ──► B1 (watchlist in edgesentry-app)
+B1 ──► B2 (Tier 1 camera)
+B1 ──► B3 (Tier 2 LiDAR)
+B2, B3 ──► B4 (evidence signing)
+B4 ──► B5 (VDES transmission)
+B5 ──► B6 (port dashboard)
+B6 ──► A4 (confirmed labels loop back to improve scoring)
+
+A4 ──► C1 (FastAPI + HTMX replaces Streamlit dashboard — parallel track)
+A4 ──► C2 (GDELT + RAG analyst briefs consume watchlist candidates)
+A3 ──► C3 (causal model uses AIS gap + sanctions event time-series)
+A3 ──► C4 (CLI hardening exposes ais_behavior / composite / marine_cadastre params)
+C3 ──► A4 (calibrated graph_risk_score weights feed back into composite scoring)
+C1 ──► B6 (C1 dashboard replaces Phase A Streamlit in port ops centre)
+```
