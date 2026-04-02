@@ -93,23 +93,22 @@ Verify Neo4j is up: open `http://localhost:7474` and log in with `neo4j / mpol-p
 
 ## Step 2 — Ingest data
 
-### Option A — Live pipeline (single command)
-
-`scripts/run_pipeline.py` handles everything in one go: schema init → AIS streaming → sanctions → ownership graph → feature engineering → scoring → GDELT geopolitical context.
+`scripts/run_pipeline.py` handles everything in one command: schema init → Marine Cadastre (optional) → AIS streaming → sanctions → ownership graph → feature engineering → scoring → GDELT geopolitical context.
 
 ```bash
 docker compose run --rm pipeline
 ```
 
-Defaults to the **Singapore / Malacca Strait** region with no live AIS streaming and 3 days of GDELT context. Four dummy shadow fleet candidates (PETROVSKY ZVEZDA, SARI NOUR, OCEAN VOYAGER, VERA SUNSET) are injected automatically via `--seed-dummy`, so the dashboard is populated even without live AIS.
+Defaults to the **Singapore / Malacca Strait** region with no live AIS streaming and 3 days of GDELT context. Four dummy shadow fleet candidates are injected automatically via `--seed-dummy`, so the dashboard is populated even without live AIS.
 
-**Options:**
+**Key flags:**
 
 | Env var / flag | Default | Description |
 |---|---|---|
 | `PIPELINE_REGION` | `singapore` | Region preset: `singapore`, `japan`, `middleeast`, `europe`, `gulf` |
-| `PIPELINE_STREAM_DURATION` | _(unset)_ | Seconds of live AIS to collect before continuing |
+| `PIPELINE_STREAM_DURATION` | _(unset)_ | Seconds of live AIS to collect |
 | `--gdelt-days N` | `3` | Days of GDELT events to ingest |
+| `--marine-cadastre-year YEAR` | _(unset)_ | Load a historical Marine Cadastre year (repeatable; uses region bbox automatically) |
 | `--seed-dummy` | on | Inject realistic dummy vessels after feature engineering |
 
 Examples:
@@ -121,48 +120,27 @@ PIPELINE_REGION=japan docker compose run --rm pipeline
 # Collect 5 minutes of live AIS
 PIPELINE_REGION=singapore PIPELINE_STREAM_DURATION=300 docker compose run --rm pipeline
 
-# More GDELT history
-docker compose run --rm pipeline uv run python scripts/run_pipeline.py \
-  --region singapore --non-interactive --gdelt-days 7
+# Gulf region with 2023 historical Marine Cadastre backfill
+PIPELINE_REGION=gulf docker compose run --rm pipeline \
+  uv run python scripts/run_pipeline.py \
+  --region gulf --non-interactive --marine-cadastre-year 2023
 ```
+
+See `docs/regional-playbooks.md` for per-region configuration details.
 
 A successful run ends with:
 
 ```
-[7/9] Scoring...                                   ✓  precision_at_50=0.62
-[8/9] Ingesting GDELT context (3d)...              ✓  Total events ingested: 5423
-[9/9] Launching dashboard...                       (skipped in non-interactive mode)
+[ 8/10] Scoring...                                 ✓  precision_at_50=0.62
+[ 9/10] Ingesting GDELT context (3d)...            ✓  Total events ingested: 5423
+[10/10] Launching dashboard...                     (skipped in non-interactive mode)
 ```
 
-Output files are written to `./data/processed/` on the host:
+Output files written to `./data/processed/`:
 
 - `<region>.duckdb` — DuckDB database for that region's raw data
 - `candidate_watchlist.parquet` — ranked candidate watchlist (read by the dashboard)
 - `gdelt.lance/` — LanceDB vector store for analyst briefs
-
----
-
-### Option B — Historical backfill with Marine Cadastre (US regions)
-
-For the `gulf` region, NOAA Marine Cadastre provides years of historical US coastal AIS. Pass `--marine-cadastre-year` and it runs as step 2 of the same pipeline command, using the region bbox automatically:
-
-```bash
-PIPELINE_REGION=gulf docker compose run --rm pipeline \
-  uv run python scripts/run_pipeline.py \
-  --region gulf --non-interactive \
-  --marine-cadastre-year 2023
-```
-
-Repeat the flag for multiple years:
-
-```bash
-PIPELINE_REGION=gulf docker compose run --rm pipeline \
-  uv run python scripts/run_pipeline.py \
-  --region gulf --non-interactive \
-  --marine-cadastre-year 2022 --marine-cadastre-year 2023
-```
-
-Marine Cadastre only covers US coastal waters, so it is most useful for the `gulf` persona. For other regions, use live AIS streaming (`PIPELINE_STREAM_DURATION`).
 
 ---
 
@@ -191,7 +169,7 @@ cat data/processed/validation_metrics.json
 docker compose run --rm pipeline uv run pytest tests/ -v
 ```
 
-Expected: **89 passed**, 3 warnings (sklearn FutureWarning, harmless).
+All tests should pass. Any warnings from sklearn are harmless.
 
 ---
 

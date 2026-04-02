@@ -194,20 +194,19 @@ uv run python src/ingest/ais_stream.py \
 
 **Marine Cadastre for historical backfill (US region only)**
 
-This is the one region where Marine Cadastre is directly useful. Use it to build a historical baseline before live streaming:
+This is the one region where Marine Cadastre is directly useful. Pass `--marine-cadastre-year` to the pipeline, and it runs automatically using the Gulf bounding box:
 
 ```bash
-DB_PATH=data/processed/gulf.duckdb uv run python src/ingest/schema.py
-uv run python src/ingest/marine_cadastre.py \
-  --year 2023 --db data/processed/gulf.duckdb
-```
+PIPELINE_REGION=gulf docker compose run --rm pipeline \
+  uv run python scripts/run_pipeline.py \
+  --region gulf --non-interactive \
+  --marine-cadastre-year 2023
 
-Note: Marine Cadastre covers US coastal zones. Gulf of Mexico data is in zones 14–16. Pass `--bbox` to override the default Singapore filter:
-
-```bash
-uv run python src/ingest/marine_cadastre.py \
-  --year 2023 --db data/processed/gulf.duckdb \
-  --bbox 8 -98 32 -60
+# Multiple years
+PIPELINE_REGION=gulf docker compose run --rm pipeline \
+  uv run python scripts/run_pipeline.py \
+  --region gulf --non-interactive \
+  --marine-cadastre-year 2022 --marine-cadastre-year 2023
 ```
 
 **A3 — Feature engineering**
