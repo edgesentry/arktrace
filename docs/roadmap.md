@@ -8,10 +8,12 @@
 
 - `pyproject.toml` with full dependency set (DuckDB, Polars, Neo4j driver, scikit-learn, SHAP, Streamlit)
 - DuckDB schema initialisation (`src/ingest/schema.py`)
-- Marine Cadastre bulk Parquet download + DuckDB load (`src/ingest/marine_cadastre.py`)
-- aisstream.io WebSocket ingestion with bounding box filter (`src/ingest/ais_stream.py`)
+- Marine Cadastre annual archive download + DuckDB load (`src/ingest/marine_cadastre.py`) — US coastal waters only; takes `--year` flag (annual files); see [regional-playbooks.md](regional-playbooks.md) for non-US historical backfill options
+- aisstream.io WebSocket ingestion with configurable bounding box (`src/ingest/ais_stream.py`) — supports `--bbox lat_min lon_min lat_max lon_max` override for multi-region deployment
+- Neo4j Docker lifecycle scripts (`scripts/start_neo4j.sh`, `scripts/stop_neo4j.sh`)
+- End-to-end local test guide (`docs/local-e2e-test.md`)
 
-**Acceptance:** DuckDB `ais_positions` table contains ≥ 6 months of AIS data for the Malacca Strait / SG area with no duplicate MMSI/timestamp rows.
+**Acceptance:** DuckDB `ais_positions` table contains ≥ 6 months of AIS data for the configured area of interest (default: Malacca Strait / SG; see [regional-playbooks.md](regional-playbooks.md) for other regions) with no duplicate MMSI/timestamp rows.
 
 ---
 
@@ -36,7 +38,7 @@
 - Identity volatility features: `flag_changes_2y`, `name_changes_2y`, `owner_changes_2y` (`src/features/identity.py`)
 - Ownership graph features (Neo4j GDS BFS): `sanctions_distance`, `cluster_sanctions_ratio` (`src/features/ownership_graph.py`)
 - Trade flow mismatch: `route_cargo_mismatch` (`src/features/trade_mismatch.py`)
-- GEBCO bathymetric mask: H3 hexagon set for the 200m-depth boundary; used to filter STS candidates to plausible draught zones (`src/features/bathymetric_mask.py`)
+- ~~GEBCO bathymetric mask (`src/features/bathymetric_mask.py`)~~ — **not implemented**; STS candidate detection uses a 5nm-from-port filter as a proxy; bathymetric masking deferred to C4
 
 **Acceptance:** `vessel_features` table in DuckDB has one row per MMSI with no null values for core features; STS candidate count matches independently verified events from open-source maritime incident reports.
 
@@ -118,33 +120,11 @@
 
 ---
 
-## Dependency Graph
+## Phase C — Pre-Submission Enhancements
 
-```
-A1 (AIS ingestion)
-  └── A3 (feature engineering — behavioral)
-        └── A4 (scoring + watchlist)
-              └── A5 (validation + submission)
+Work on Phase C items has begun in parallel with Phase A/B ahead of the 29 April 2026 Cap Vista submission. Items marked **In Progress** have open GitHub issues.
 
-A2 (sanctions + registry)
-  └── A3 (feature engineering — graph + identity)
-
-A4 ──► B1 (watchlist in edgesentry-app)
-B1 ──► B2 (Tier 1 camera)
-B1 ──► B3 (Tier 2 LiDAR)
-B2, B3 ──► B4 (evidence signing)
-B4 ──► B5 (VDES transmission)
-B5 ──► B6 (port dashboard)
-B6 ──► A4 (confirmed labels loop back to improve scoring)
-```
-
----
-
-## Phase C — Post-Submission Enhancements
-
-> These items are out of scope for the Phase A proposal submission (deadline: 29 April 2026). They represent validated improvements to be prioritised if a trial contract is awarded.
-
-### C1 · Dashboard Migration: FastAPI + HTMX
+### C1 · Dashboard Migration: FastAPI + HTMX *(In Progress — [#15](https://github.com/edgesentry/mpol-analysis/issues/15))*
 
 The Phase A Streamlit dashboard (`src/viz/dashboard.py`) is optimised for development speed. For a multi-user port operations deployment, replace it with:
 
@@ -167,6 +147,15 @@ SHAP `top_signals` explain *which features* drove a flag but not *why those feat
 
 This keeps the stack fully offline-capable (no cloud LLM dependency) and satisfies the Cap Vista explainability requirement at the human-analyst level.
 
+### C4 · Multi-Region CLI Hardening
+
+Several parameters currently require direct code edits when deploying to non-default regions (documented in [regional-playbooks.md](regional-playbooks.md)):
+
+- `--gap-threshold-hours` flag on `src/features/ais_behavior.py` (currently hardcoded at 6h; Japan Sea and Middle East require 12h+)
+- `--w-anomaly`, `--w-graph`, `--w-identity` weight flags on `src/score/composite.py` (currently hardcoded at 0.4 / 0.4 / 0.2)
+- `--bbox` on `src/ingest/marine_cadastre.py` CLI (bbox currently only settable via Python call for non-Singapore regions)
+- GEBCO bathymetric mask (`src/features/bathymetric_mask.py`) — deferred from A3; provides higher-precision STS candidate filtering than the current 5nm-from-port heuristic
+
 ### C3 · Causal Sanction-Response Model
 
 Quantify the causal link between sanction events and observable AIS behaviour:
@@ -180,12 +169,41 @@ Quantify the causal link between sanction events and observable AIS behaviour:
 
 ## Timeline
 
-| Week | Phase A deliverable |
-|---|---|
-| Week 1 (Apr 1–7) | A1: Project setup + AIS ingestion |
-| Week 2 (Apr 8–14) | A2: Sanctions + Neo4j ownership graph |
-| Week 3 (Apr 15–21) | A3: Full feature engineering pipeline |
-| Week 4 (Apr 22–28) | A4: Scoring + watchlist + Streamlit dashboard |
-| Apr 29 | A5: Validate + submit proposal to Cap Vista |
+| Week | Phase A deliverable | Phase C (parallel) |
+|---|---|---|
+| Week 1 (Apr 1–7) | A1: Project setup + AIS ingestion | — |
+| Week 2 (Apr 8–14) | A2: Sanctions + Neo4j ownership graph | — |
+| Week 3 (Apr 15–21) | A3: Full feature engineering pipeline | C1: FastAPI + HTMX dashboard (start) |
+| Week 4 (Apr 22–28) | A4: Scoring + watchlist + Streamlit dashboard | C1: continued |
+| Apr 29 | A5: Validate + submit proposal to Cap Vista | C1: targeted for submission alongside A5 |
 
 Phase B timeline depends on Cap Vista trial contract award (expected within 60 days of submission deadline).
+
+---
+
+## Dependency Graph
+
+```
+A1 (AIS ingestion)
+  └── A3 (feature engineering — behavioral)
+        └── A4 (scoring + watchlist)
+              └── A5 (validation + submission)
+
+A2 (sanctions + registry)
+  └── A3 (feature engineering — graph + identity)
+
+A4 ──► B1 (watchlist in edgesentry-app)
+B1 ──► B2 (Tier 1 camera)
+B1 ──► B3 (Tier 2 LiDAR)
+B2, B3 ──► B4 (evidence signing)
+B4 ──► B5 (VDES transmission)
+B5 ──► B6 (port dashboard)
+B6 ──► A4 (confirmed labels loop back to improve scoring)
+
+A4 ──► C1 (FastAPI + HTMX replaces Streamlit dashboard — parallel track)
+A4 ──► C2 (GDELT + RAG analyst briefs consume watchlist candidates)
+A3 ──► C3 (causal model uses AIS gap + sanctions event time-series)
+A3 ──► C4 (CLI hardening exposes ais_behavior / composite / marine_cadastre params)
+C3 ──► A4 (calibrated graph_risk_score weights feed back into composite scoring)
+C1 ──► B6 (C1 dashboard replaces Phase A Streamlit in port ops centre)
+```
