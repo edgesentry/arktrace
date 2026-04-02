@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import polars as pl
 import pytest
