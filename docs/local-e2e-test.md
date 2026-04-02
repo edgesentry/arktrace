@@ -76,6 +76,14 @@ Get an API key at https://aistudio.google.com/app/apikey.
 
 ---
 
+### Local LLM (macOS)
+
+For macOS users, you can also run inference locally using **MLX LM** or **Ollama**. This allows you to generate analyst briefs without API keys or external costs.
+
+See [Local LLM Setup (macOS)](local-llm-setup.md) for a detailed configuration guide.
+
+---
+
 ## Step 1 — Start Neo4j and the dashboard
 
 ```bash
