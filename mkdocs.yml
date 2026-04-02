@@ -1,8 +1,8 @@
-site_name: capvista-mpol-analysis
+site_name: mpol-analysis
 site_description: Maritime Pattern of Life analysis pipeline for shadow fleet candidate screening.
-site_url: https://edgesentry.github.io/capvista-mpol-analysis/
-repo_url: https://github.com/edgesentry/capvista-mpol-analysis
-repo_name: edgesentry/capvista-mpol-analysis
+site_url: https://edgesentry.github.io/mpol-analysis/
+repo_url: https://github.com/edgesentry/mpol-analysis
+repo_name: edgesentry/mpol-analysis
 edit_uri: edit/main/docs/
 
 docs_dir: docs
@@ -35,3 +35,4 @@ nav:
   - Local E2E Test: local-e2e-test.md
   - Deployment: deployment.md
   - Regional Playbooks: regional-playbooks.md
+  - Development Guide: development.md

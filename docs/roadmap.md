@@ -151,10 +151,20 @@ This keeps the stack fully offline-capable (no cloud LLM dependency) and satisfi
 
 Several parameters currently require direct code edits when deploying to non-default regions (documented in [regional-playbooks.md](regional-playbooks.md)):
 
-- `--gap-threshold-hours` flag on `src/features/ais_behavior.py` (currently hardcoded at 6h; Japan Sea and Middle East require 12h+)
-- `--w-anomaly`, `--w-graph`, `--w-identity` weight flags on `src/score/composite.py` (currently hardcoded at 0.4 / 0.4 / 0.2)
+- ~~`--gap-threshold-hours` flag on `src/features/ais_behavior.py`~~ **Done** — flag added; default 6h, pass 12 for Japan Sea / Middle East
+- ~~`--w-anomaly`, `--w-graph`, `--w-identity` weight flags on `src/score/composite.py`~~ **Done** — flags added; defaults 0.4 / 0.4 / 0.2
 - `--bbox` on `src/ingest/marine_cadastre.py` CLI (bbox currently only settable via Python call for non-Singapore regions)
 - GEBCO bathymetric mask (`src/features/bathymetric_mask.py`) — deferred from A3; provides higher-precision STS candidate filtering than the current 5nm-from-port heuristic
+
+### C5 · Interactive Pipeline CLI *(Done — [#24](https://github.com/edgesentry/mpol-analysis/issues/24))*
+
+`scripts/run_pipeline.py` — a single interactive CLI that walks the user through region selection and executes all pipeline steps with region-specific defaults.
+
+- Five built-in region presets (Singapore, Japan Sea, Middle East, Europe, US Gulf) with correct bbox, gap threshold, feature window, and composite weights pre-configured
+- Interactive step-by-step progress display; failed steps prompt retry or skip
+- Ctrl-C during AIS streaming stops the stream cleanly and continues to the next step
+- `--region` + `--non-interactive` flags for CI/scripted use
+- No new dependencies
 
 ### C3 · Causal Sanction-Response Model
 

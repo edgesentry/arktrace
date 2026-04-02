@@ -154,13 +154,15 @@ uv run python src/ingest/ais_stream.py \
 # tight DPRK coastal corridor
 ```
 
-**AIS gap threshold:** The default gap threshold is 6 hours (`GAP_THRESHOLD_H = 6` in `src/features/ais_behavior.py`). In Japan Sea analysis, vessels may go dark for 12–48 hours near DPRK. To change the threshold, edit line 27 of `src/features/ais_behavior.py`:
+**AIS gap threshold:** The default gap threshold is 6 hours. In Japan Sea analysis, vessels may go dark for 12–48 hours near DPRK. Pass the flag directly:
 
-```python
-GAP_THRESHOLD_H = 12  # increase for DPRK dark-period detection
+```bash
+DB_PATH=data/processed/japansea.duckdb \
+  uv run python src/features/ais_behavior.py \
+  --db data/processed/japansea.duckdb \
+  --window 60 \
+  --gap-threshold-hours 12
 ```
-
-There is no CLI flag for this yet — it requires a direct code edit.
 
 ---
 
@@ -224,17 +226,13 @@ DB_PATH=data/processed/gulf.duckdb \
 
 **A4 — Composite scoring**
 
-For US/OFAC analysis, ownership graph proximity is less discriminating (more vessels have OFAC exposure in this region) and behavioral anomaly is more important. To shift the weights, edit `src/score/composite.py` line 185:
+For US/OFAC analysis, ownership graph proximity is less discriminating (more vessels have OFAC exposure in this region) and behavioral anomaly is more important. Pass weights via CLI flags:
 
-```python
-# Default:
-# 0.4 * anomaly + 0.4 * graph + 0.2 * identity
-
-# US Gulf recommended:
-(0.5 * pl.col("anomaly_score") + 0.3 * pl.col("graph_risk_score") + 0.2 * pl.col("identity_score"))
+```bash
+uv run python src/score/composite.py \
+  --db data/processed/gulf.duckdb \
+  --w-anomaly 0.50 --w-graph 0.30 --w-identity 0.20
 ```
-
-There is no CLI flag for weight adjustment — it requires a direct code edit.
 
 **Dashboard — Filters to apply**
 
@@ -255,7 +253,13 @@ WATCHLIST_OUTPUT_PATH=data/processed/gulf_watchlist.parquet \
 
 **Marine Cadastre bbox is hardcoded for Singapore:** See the Python snippet above. The `bbox` parameter of `load_csv_to_duckdb()` accepts any dict with `lat_min`, `lat_max`, `lon_min`, `lon_max` — only the CLI default is Singapore.
 
-**No CLI flag for composite weights:** Edit `src/score/composite.py` line 185 directly. A future enhancement would expose `--w-anomaly`, `--w-graph`, `--w-identity` CLI flags on `composite.py`.
+**Composite weights:** Pass flags directly to `composite.py`:
+
+```bash
+uv run python src/score/composite.py \
+  --db data/processed/gulf.duckdb \
+  --w-anomaly 0.50 --w-graph 0.30 --w-identity 0.20
+```
 
 **Multiple regions simultaneously:** The pipeline uses a single `DB_PATH`. To run all three regions in parallel, use separate `.env` files:
 
@@ -332,19 +336,13 @@ Run all other feature scripts with `--db data/processed/europe.duckdb`.
 
 **A4 — Composite scoring**
 
-For European/Russian sanctions analysis, identity volatility is a very strong signal — the Russian shadow fleet aggressively re-flags and renames vessels. Shift weight toward identity:
+For European/Russian sanctions analysis, identity volatility is a very strong signal — the Russian shadow fleet aggressively re-flags and renames vessels. Shift weight toward identity via CLI flags:
 
-Edit `src/score/composite.py` line 185:
-
-```python
-# Default:
-# 0.4 * anomaly + 0.4 * graph + 0.2 * identity
-
-# Europe / Russian sanctions recommended:
-(0.35 * pl.col("anomaly_score") + 0.35 * pl.col("graph_risk_score") + 0.30 * pl.col("identity_score"))
+```bash
+uv run python src/score/composite.py \
+  --db data/processed/europe.duckdb \
+  --w-anomaly 0.35 --w-graph 0.35 --w-identity 0.30
 ```
-
-There is no CLI flag for weight adjustment — it requires a direct code edit.
 
 **Dashboard — Filters to apply**
 
@@ -473,10 +471,14 @@ DB_PATH=data/processed/middleeast.duckdb \
   --window 60
 ```
 
-Increase the AIS gap threshold to detect Iranian-style dark periods (typically 12–72 h near Kharg Island). Edit `src/features/ais_behavior.py` line 27:
+Increase the AIS gap threshold to detect Iranian-style dark periods (typically 12–72 h near Kharg Island):
 
-```python
-GAP_THRESHOLD_H = 12  # Iranian vessels go dark for 12–72 h during loading
+```bash
+DB_PATH=data/processed/middleeast.duckdb \
+  uv run python src/features/ais_behavior.py \
+  --db data/processed/middleeast.duckdb \
+  --window 60 \
+  --gap-threshold-hours 12
 ```
 
 Run all other feature scripts with `--db data/processed/middleeast.duckdb`.
@@ -538,12 +540,21 @@ Score each DB independently and merge the top candidates manually for the daily 
 
 ---
 
+## Running the pipeline
+
+The recommended entry point is `scripts/run_pipeline.py`, which handles region selection, passes all flags automatically, and walks through each step interactively:
+
+```bash
+uv run python scripts/run_pipeline.py                          # interactive
+uv run python scripts/run_pipeline.py --region japan --non-interactive
+```
+
 ## Feature gaps and planned improvements
 
 | Gap | Affected personas | Workaround |
 |---|---|---|
-| No CLI flag for `GAP_THRESHOLD_H` | Japan Sea, Middle East | Edit `src/features/ais_behavior.py:27` directly |
-| No CLI flags for composite weights | US Gulf, Europe | Edit `src/score/composite.py:185` directly |
+| ~~No CLI flag for `GAP_THRESHOLD_H`~~ | ~~Japan Sea, Middle East~~ | **Resolved** — use `--gap-threshold-hours` on `ais_behavior.py` |
+| ~~No CLI flags for composite weights~~ | ~~US Gulf, Europe~~ | **Resolved** — use `--w-anomaly`, `--w-graph`, `--w-identity` on `composite.py` |
 | Marine Cadastre bbox hardcoded for Singapore | US Gulf, Europe | Call `load_csv_to_duckdb()` with custom `bbox` dict |
 | No historical AIS for non-US regions | Japan Sea, Europe, Middle East | Run `ais_stream.py` to accumulate data; or import AISHub/MarineTraffic CSV exports |
 | Single `DB_PATH` per pipeline run | All multi-region | Use separate DuckDB files and pass `--db` to every script |

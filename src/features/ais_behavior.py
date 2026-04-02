@@ -72,7 +72,7 @@ def load_ais_window(db_path: str, window_days: int = 30) -> pl.DataFrame:
 # Individual feature computations
 # ---------------------------------------------------------------------------
 
-def compute_gap_features(df: pl.DataFrame) -> pl.DataFrame:
+def compute_gap_features(df: pl.DataFrame, gap_threshold_h: float = GAP_THRESHOLD_H) -> pl.DataFrame:
     """ais_gap_count_30d and ais_gap_max_hours per MMSI."""
     return (
         df.lazy()
@@ -81,7 +81,7 @@ def compute_gap_features(df: pl.DataFrame) -> pl.DataFrame:
             pl.col("timestamp").diff().over("mmsi")
             .dt.total_minutes().alias("gap_min")
         )
-        .filter(pl.col("gap_min") > GAP_THRESHOLD_H * 60)
+        .filter(pl.col("gap_min") > gap_threshold_h * 60)
         .group_by("mmsi")
         .agg([
             pl.len().alias("ais_gap_count_30d"),
@@ -200,7 +200,11 @@ def compute_port_call_ratio(df: pl.DataFrame) -> pl.DataFrame:
 # Orchestrator
 # ---------------------------------------------------------------------------
 
-def compute_ais_features(db_path: str = DEFAULT_DB_PATH, window_days: int = 30) -> pl.DataFrame:
+def compute_ais_features(
+    db_path: str = DEFAULT_DB_PATH,
+    window_days: int = 30,
+    gap_threshold_h: float = GAP_THRESHOLD_H,
+) -> pl.DataFrame:
     """Compute all AIS behavioral features. Returns DataFrame one row per MMSI."""
     df = load_ais_window(db_path, window_days)
 
@@ -217,7 +221,7 @@ def compute_ais_features(db_path: str = DEFAULT_DB_PATH, window_days: int = 30) 
         return _empty
 
     all_mmsi = df.select("mmsi").unique()
-    gaps     = compute_gap_features(df)
+    gaps     = compute_gap_features(df, gap_threshold_h)
     jumps    = compute_position_jumps(df)
     sts      = compute_sts_candidates(df)
     loiter   = compute_loitering(df)
@@ -247,8 +251,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute AIS behavioral features")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     parser.add_argument("--window", type=int, default=30, help="Rolling window (days)")
+    parser.add_argument("--gap-threshold-hours", type=float, default=GAP_THRESHOLD_H,
+                        help="AIS gap threshold in hours (default: 6; use 12 for DPRK/Iran analysis)")
     args = parser.parse_args()
 
-    result = compute_ais_features(args.db, args.window)
+    result = compute_ais_features(args.db, args.window, args.gap_threshold_hours)
     print(f"AIS features: {len(result)} vessels")
     print(result.head())

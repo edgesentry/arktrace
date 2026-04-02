@@ -61,7 +61,17 @@ def main() -> None:
 
     watchlist = load_watchlist(DEFAULT_WATCHLIST_PATH)
     if watchlist.is_empty():
-        st.warning("candidate_watchlist.parquet not found or empty. Run src/score/watchlist.py first.")
+        if not os.path.exists(DEFAULT_WATCHLIST_PATH):
+            st.warning(
+                f"Watchlist not found at `{DEFAULT_WATCHLIST_PATH}`. "
+                "Run the full pipeline first: `uv run python scripts/run_pipeline.py`"
+            )
+        else:
+            st.warning(
+                f"Watchlist at `{DEFAULT_WATCHLIST_PATH}` is empty — the pipeline ran but "
+                "produced no scored vessels. Check that AIS data was ingested "
+                "(ais_positions row count > 0 in the DB)."
+            )
         return
 
     metrics = load_validation_metrics(DEFAULT_VALIDATION_PATH)
@@ -124,7 +134,7 @@ def main() -> None:
             "confidence",
             "top_signals",
         ]).to_pandas()
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width="stretch", hide_index=True)
 
     st.subheader("Top signals")
     top_row = filtered.head(1)
