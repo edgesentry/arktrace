@@ -32,3 +32,4 @@ nav:
   - Scenarios: scenarios.md
   - Roadmap: roadmap.md
   - Field Investigation: field-investigation.md
+  - Local E2E Test: local-e2e-test.md

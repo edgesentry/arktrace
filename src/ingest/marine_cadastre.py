@@ -1,24 +1,20 @@
 """
 Marine Cadastre AIS bulk loader.
 
-Downloads NOAA Marine Cadastre AIS CSV archives (US coastal zones) and loads
+Downloads NOAA Marine Cadastre AIS annual archives (US coastal waters) and loads
 records that fall within the area of interest into DuckDB. Marine Cadastre
 provides supplementary historical coverage for vessels that transited
 US-monitored zones; it is not the primary source for the Singapore/Malacca area.
 
-Download URL pattern:
-  https://coast.noaa.gov/htdata/CMSP/AISDataCatalogue/AIS_{year}_{month:02d}_Zone{zone:02d}.zip
+Download URL pattern (current as of 2025):
+  https://marinecadastre.gov/downloads/data/ais/ais{year}/AISVesselTracks{year}.zip
 
 Usage:
-    # Load Pacific zone for 6 months of 2024 (supplementary historical backfill)
-    uv run python src/ingest/marine_cadastre.py --year 2024 --months 1-6 --zones 10
-
-    # Load multiple zones
-    uv run python src/ingest/marine_cadastre.py --year 2024 --months 1-12 --zones 10,17,18
+    uv run python src/ingest/marine_cadastre.py --year 2023
+    uv run python src/ingest/marine_cadastre.py --year 2022 --year 2023
 """
 
 import argparse
-import io
 import os
 import zipfile
 from pathlib import Path
@@ -43,7 +39,7 @@ BBOX = {
     "lon_max": 122.0,
 }
 
-BASE_URL = "https://coast.noaa.gov/htdata/CMSP/AISDataCatalogue"
+BASE_URL = "https://marinecadastre.gov/downloads/data/ais"
 
 # Marine Cadastre CSV column mapping → internal schema
 _MC_COLUMNS = {
@@ -62,48 +58,52 @@ _MC_COLUMNS = {
 }
 
 
-def _archive_url(year: int, month: int, zone: int) -> str:
-    return f"{BASE_URL}/AIS_{year}_{month:02d}_Zone{zone:02d}.zip"
+def _archive_url(year: int) -> str:
+    return f"{BASE_URL}/ais{year}/AISVesselTracks{year}.zip"
 
 
-def download_zone(
+def download_year(
     year: int,
-    month: int,
-    zone: int,
     out_dir: str = DEFAULT_RAW_DIR,
-) -> Path | None:
-    """Download one zone archive and return the path to the extracted CSV.
+) -> list[Path]:
+    """Download the annual archive for *year* and return paths to extracted CSVs.
 
-    Returns None if the archive is not available (HTTP 404).
+    Returns an empty list if the archive is not available (HTTP 404).
     Already-downloaded files are skipped.
     """
-    out_path = Path(out_dir) / f"AIS_{year}_{month:02d}_Zone{zone:02d}"
-    csv_path = out_path / f"AIS_{year}_{month:02d}_Zone{zone:02d}.csv"
-
-    if csv_path.exists():
-        return csv_path
+    out_path = Path(out_dir) / str(year)
+    existing_csvs = list(out_path.glob("*.csv"))
+    if existing_csvs:
+        return existing_csvs
 
     out_path.mkdir(parents=True, exist_ok=True)
-    url = _archive_url(year, month, zone)
+    url = _archive_url(year)
+    print(f"  Downloading {url} …")
 
-    with httpx.Client(timeout=300, follow_redirects=True) as client:
-        resp = client.get(url)
-        if resp.status_code == 404:
-            print(f"  Not found (404): {url}")
-            return None
-        resp.raise_for_status()
+    zip_path = out_path / f"AISVesselTracks{year}.zip"
+    with httpx.Client(timeout=600, follow_redirects=True) as client:
+        with client.stream("GET", url) as resp:
+            if resp.status_code == 404:
+                print(f"  Not found (404): {url}")
+                return []
+            resp.raise_for_status()
+            total = int(resp.headers.get("content-length", 0))
+            downloaded = 0
+            with open(zip_path, "wb") as f:
+                for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total:
+                        pct = downloaded / total * 100
+                        print(f"\r  {downloaded / 1e6:.0f} MB / {total / 1e6:.0f} MB ({pct:.0f}%)", end="", flush=True)
+            print()
 
-    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+    print(f"  Extracting …")
+    with zipfile.ZipFile(zip_path) as zf:
         zf.extractall(out_path)
+    zip_path.unlink()
 
-    if not csv_path.exists():
-        # Some archives use a flat structure without subdirectory
-        candidates = list(out_path.glob("*.csv"))
-        if candidates:
-            return candidates[0]
-        return None
-
-    return csv_path
+    return list(out_path.glob("**/*.csv"))
 
 
 def load_csv_to_duckdb(
@@ -188,23 +188,25 @@ def load_csv_to_duckdb(
     return inserted
 
 
-def load_zone(
+def load_year(
     year: int,
-    month: int,
-    zone: int,
     db_path: str = DEFAULT_DB_PATH,
     raw_dir: str = DEFAULT_RAW_DIR,
     bbox: dict = BBOX,
 ) -> int:
-    """Download (if needed) and load one zone/month into DuckDB."""
-    print(f"Zone {zone:02d} {year}-{month:02d}: downloading …")
-    csv_path = download_zone(year, month, zone, raw_dir)
-    if csv_path is None:
+    """Download (if needed) and load all CSVs for *year* into DuckDB."""
+    print(f"Year {year}: downloading archive …")
+    csv_paths = download_year(year, raw_dir)
+    if not csv_paths:
         return 0
-    print(f"  Loading {csv_path} …")
-    n = load_csv_to_duckdb(csv_path, db_path, bbox)
-    print(f"  Inserted {n} rows")
-    return n
+
+    total = 0
+    for csv_path in csv_paths:
+        print(f"  Loading {csv_path.name} …")
+        n = load_csv_to_duckdb(csv_path, db_path, bbox)
+        print(f"  Inserted {n} rows")
+        total += n
+    return total
 
 
 def _parse_range(s: str) -> list[int]:
@@ -217,18 +219,14 @@ def _parse_range(s: str) -> list[int]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Load Marine Cadastre AIS data into DuckDB")
-    parser.add_argument("--year", type=int, required=True, help="Year (e.g. 2024)")
-    parser.add_argument("--months", default="1-12", help="Month range or list, e.g. '1-6' or '1,3,6'")
-    parser.add_argument("--zones", default="10", help="UTM zone(s), e.g. '10' or '10,17,18'")
+    parser.add_argument("--year", type=int, required=True, action="append", dest="years",
+                        help="Year to download (repeat for multiple, e.g. --year 2022 --year 2023)")
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="DuckDB path")
     parser.add_argument("--raw-dir", default=DEFAULT_RAW_DIR, help="Raw download directory")
     args = parser.parse_args()
 
     init_schema(args.db)
-    months = _parse_range(args.months)
-    zones = _parse_range(args.zones)
     total = 0
-    for zone in zones:
-        for month in months:
-            total += load_zone(args.year, month, zone, args.db, args.raw_dir)
+    for year in args.years:
+        total += load_year(year, args.db, args.raw_dir)
     print(f"\nTotal rows inserted: {total}")
