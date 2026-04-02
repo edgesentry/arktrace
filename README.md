@@ -1,4 +1,4 @@
-# capvista-mpol-analysis
+# arktrace
 
 Open-source Maritime Pattern of Life (MPOL) analysis pipeline for identifying shadow fleet vessel candidates using public data.
 
@@ -9,6 +9,12 @@ Built for **Cap Vista Accelerator Solicitation 5.0, Challenge 1** (deadline: 29 
 Ingests public AIS, sanctions, vessel registry, and trade flow data to produce a ranked watchlist of candidate shadow fleet vessels — ships operating in the regulatory grey zone through AIS manipulation, flag/name laundering, and illicit ship-to-ship transfers.
 
 **Output:** `data/processed/candidate_watchlist.parquet` — ranked vessels with composite confidence scores and SHAP-explained top signals, ready to hand off to a patrol officer.
+
+## Why this project is called Arktrace?
+
+`Arktrace` is a portmanteau of "Ark" (denoting protection, sanctuary, and the traditional maritime vessel) and "Trace" (representing the digital footprint, vessel tracks, and the pursuit of evidence).
+
+It signifies our mission to safeguard maritime integrity by uncovering hidden truths within complex global data—serving as the analytical "Ark" that protects global trade lanes through advanced forensic "Tracing."
 
 ## Documentation
 

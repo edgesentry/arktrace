@@ -75,8 +75,8 @@ sudo usermod -aG docker $USER
 ### 3. Clone and configure
 
 ```bash
-git clone https://github.com/edgesentry/mpol-analysis.git
-cd mpol-analysis
+git clone https://github.com/edgesentry/arktrace.git
+cd arktrace
 cp .env.example .env
 # Edit .env — set AISSTREAM_API_KEY and NEO4J_PASSWORD
 ```
@@ -119,7 +119,7 @@ sudo nginx -t && sudo systemctl reload nginx
 The scoring pipeline runs on the host (outside Docker), writing into the bind-mounted `data/` directory:
 
 ```bash
-cd mpol-analysis
+cd arktrace
 uv sync
 uv run python src/ingest/schema.py
 uv run python src/ingest/ais_stream.py &    # background ingestion
@@ -135,7 +135,7 @@ Add a cron job to re-score every 15 minutes:
 ```bash
 crontab -e
 # Add:
-*/15 * * * * cd /home/ubuntu/mpol-analysis && uv run python src/score/watchlist.py >> /var/log/mpol-score.log 2>&1
+*/15 * * * * cd /home/ubuntu/arktrace && uv run python src/score/watchlist.py >> /var/log/mpol-score.log 2>&1
 ```
 
 ---

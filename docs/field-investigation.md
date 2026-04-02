@@ -8,7 +8,7 @@
 
 ```
 Port Operations Centre
-  ├── candidate_watchlist.parquet  ← from this repo (capvista-mpol-analysis)
+  ├── candidate_watchlist.parquet  ← from this repo (arktrace)
   ├── Live AIS feed
   └── VDES shore station
        │  task assignment + watchlist JSON (VDE-TDM ch 26/86)

@@ -2,7 +2,7 @@
 
 ## What This Project Does
 
-**capvista-mpol-analysis** is an open-source Maritime Pattern of Life (MPOL) analysis pipeline that ingests public data to identify and rank candidate shadow fleet vessels — ships that operate in the regulatory grey zone by exploiting AIS spoofing, frequent flag and name changes, and illicit ship-to-ship (STS) transfers to bypass international sanctions.
+**arktrace** is an open-source Maritime Pattern of Life (MPOL) analysis pipeline that ingests public data to identify and rank candidate shadow fleet vessels — ships that operate in the regulatory grey zone by exploiting AIS spoofing, frequent flag and name changes, and illicit ship-to-ship (STS) transfers to bypass international sanctions.
 
 The output is a ranked `candidate_watchlist.parquet`: a list of vessels with composite confidence scores, per-feature SHAP explanations, and last known positions — ready to hand off to a patrol officer for physical investigation.
 
@@ -25,7 +25,7 @@ Existing tools address one or two of these signals in isolation. This project fu
 This repo covers **Phase A: Screening** only.
 
 ```
-[capvista-mpol-analysis]           [edgesentry-app / edgesentry-rs]
+[arktrace]                         [edgesentry-app / edgesentry-rs]
   Public data ingestion        →     Physical investigation
   Feature engineering          →     Close-range measurement
   Shadow fleet scoring         →     Evidence capture + signing
