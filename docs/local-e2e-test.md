@@ -144,24 +144,25 @@ Output files are written to `./data/processed/` on the host:
 
 ### Option B — Historical backfill with Marine Cadastre (US regions)
 
-For the `gulf` region, NOAA Marine Cadastre provides years of historical US coastal AIS. Run this **before** the pipeline to seed the DB with a historical baseline:
+For the `gulf` region, NOAA Marine Cadastre provides years of historical US coastal AIS. Pass `--marine-cadastre-year` and it runs as step 2 of the same pipeline command, using the region bbox automatically:
 
 ```bash
-# Initialise the schema
-docker compose run --rm pipeline uv run python src/ingest/schema.py \
-  --db data/processed/gulf.duckdb
-
-# Load 2023 historical AIS, filtered to the Gulf of Mexico bbox
-docker compose run --rm pipeline uv run python src/ingest/marine_cadastre.py \
-  --year 2023 \
-  --db data/processed/gulf.duckdb \
-  --bbox 8 -98 32 -60
-
-# Then run the full pipeline on top of that data
-PIPELINE_REGION=gulf docker compose run --rm pipeline
+PIPELINE_REGION=gulf docker compose run --rm pipeline \
+  uv run python scripts/run_pipeline.py \
+  --region gulf --non-interactive \
+  --marine-cadastre-year 2023
 ```
 
-The `--bbox LAT_MIN LON_MIN LAT_MAX LON_MAX` flag accepts any region. Marine Cadastre only covers US coastal waters, so it is most useful for the `gulf` persona; for other regions use live AIS streaming (`PIPELINE_STREAM_DURATION`).
+Repeat the flag for multiple years:
+
+```bash
+PIPELINE_REGION=gulf docker compose run --rm pipeline \
+  uv run python scripts/run_pipeline.py \
+  --region gulf --non-interactive \
+  --marine-cadastre-year 2022 --marine-cadastre-year 2023
+```
+
+Marine Cadastre only covers US coastal waters, so it is most useful for the `gulf` persona. For other regions, use live AIS streaming (`PIPELINE_STREAM_DURATION`).
 
 ---
 
