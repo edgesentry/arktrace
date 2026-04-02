@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MPOL Watchlist</title>
+
+  <!-- MapLibre GL JS -->
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@2.0.3/dist/htmx.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+      background: #0f1117;
+      color: #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      padding: 0.75rem 1.25rem;
+      background: #1a1f2e;
+      border-bottom: 1px solid #2d3748;
+      flex-shrink: 0;
+    }
+
+    header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: 0.05em; color: #93c5fd; }
+
+    .kpi-bar {
+      display: flex;
+      gap: 1.5rem;
+      padding: 0.6rem 1.25rem;
+      background: #161b27;
+      border-bottom: 1px solid #2d3748;
+      flex-shrink: 0;
+    }
+
+    .kpi { display: flex; flex-direction: column; gap: 0.1rem; }
+    .kpi-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: #718096; }
+    .kpi-value { font-size: 1.1rem; font-weight: 700; color: #e2e8f0; }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    .sidebar {
+      width: 320px;
+      min-width: 280px;
+      display: flex;
+      flex-direction: column;
+      background: #1a1f2e;
+      border-right: 1px solid #2d3748;
+      overflow: hidden;
+    }
+
+    .filter-panel {
+      padding: 1rem;
+      border-bottom: 1px solid #2d3748;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .filter-panel h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: #718096; }
+
+    label { font-size: 0.8rem; color: #a0aec0; display: block; margin-bottom: 0.25rem; }
+
+    input[type="range"] { width: 100%; accent-color: #3b82f6; }
+    #conf-value { font-size: 0.8rem; color: #93c5fd; }
+
+    select[multiple] {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      color: #e2e8f0;
+      border-radius: 4px;
+      padding: 0.3rem;
+      font-size: 0.8rem;
+      max-height: 110px;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      color: #e2e8f0;
+      border-radius: 4px;
+      padding: 0.4rem 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    button.apply-btn {
+      width: 100%;
+      padding: 0.5rem;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    button.apply-btn:hover { background: #2563eb; }
+
+    /* ── Ranked table ───────────────────────────────────── */
+    .table-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.5rem 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #1a1f2e;
+      color: #718096;
+      text-transform: uppercase;
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid #2d3748;
+    }
+
+    tbody tr { border-bottom: 1px solid #1e2535; }
+    tbody tr:hover { background: #1e2a3a; }
+    tbody td { padding: 0.45rem 0.75rem; vertical-align: top; }
+    td.signals { color: #718096; font-size: 0.7rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      font-weight: 700;
+      font-size: 0.72rem;
+    }
+    .badge-red    { background: rgba(220,38,38,0.2);   color: #f87171; }
+    .badge-yellow { background: rgba(245,158,11,0.2);  color: #fbbf24; }
+    .badge-green  { background: rgba(34,197,94,0.2);   color: #4ade80; }
+
+    /* ── Map ────────────────────────────────────────────── */
+    #map { flex: 1; }
+
+    /* ── Alert toast ────────────────────────────────────── */
+    #alert-container {
+      position: fixed;
+      bottom: 1.25rem;
+      right: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      z-index: 9999;
+    }
+
+    .alert-toast {
+      background: rgba(220,38,38,0.9);
+      color: white;
+      padding: 0.6rem 1rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      max-width: 280px;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to   { transform: translateX(0);   opacity: 1; }
+    }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #0f1117; }
+    ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>&#9760; Shadow Fleet Watchlist</h1>
+  <span style="color:#718096;font-size:0.75rem;">MPOL &middot; Maritime Pattern of Life</span>
+</header>
+
+<!-- KPI bar -->
+<div class="kpi-bar" id="kpi-bar">
+  <div class="kpi"><span class="kpi-label">Candidates</span><span class="kpi-value" id="kpi-total">—</span></div>
+  <div class="kpi"><span class="kpi-label">High (&ge;0.75)</span><span class="kpi-value" id="kpi-high">—</span></div>
+  <div class="kpi"><span class="kpi-label">Avg confidence</span><span class="kpi-value" id="kpi-avg">—</span></div>
+  <div class="kpi" id="kpi-metrics" style="display:none">
+    <span class="kpi-label">Precision@50</span><span class="kpi-value" id="kpi-p50">—</span>
+  </div>
+  <div class="kpi" id="kpi-recall" style="display:none">
+    <span class="kpi-label">Recall@200</span><span class="kpi-value" id="kpi-r200">—</span>
+  </div>
+  <div class="kpi" id="kpi-auroc-wrap" style="display:none">
+    <span class="kpi-label">AUROC</span><span class="kpi-value" id="kpi-auroc">—</span>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Sidebar: filters + ranked table -->
+  <aside class="sidebar">
+    <div class="filter-panel">
+      <h2>Filters</h2>
+
+      <div>
+        <label>Min confidence: <span id="conf-value">0.40</span></label>
+        <input type="range" id="min-conf" min="0" max="1" step="0.05" value="0.40" oninput="document.getElementById('conf-value').textContent=parseFloat(this.value).toFixed(2)" />
+      </div>
+
+      <div>
+        <label>Vessel types</label>
+        <select id="vessel-type-select" multiple></select>
+      </div>
+
+      <div>
+        <label>Top N</label>
+        <input type="number" id="top-n" value="50" min="1" max="500" />
+      </div>
+
+      <button class="apply-btn" onclick="applyFilters()">Apply</button>
+    </div>
+
+    <!-- HTMX-powered ranked table -->
+    <div class="table-panel">
+      <table>
+        <thead>
+          <tr>
+            <th>MMSI</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Flag</th>
+            <th>Score</th>
+            <th>Signals</th>
+          </tr>
+        </thead>
+        <tbody
+          id="watchlist-tbody"
+          hx-get="/api/watchlist/top?min_confidence=0.4&top_n=50"
+          hx-trigger="load"
+          hx-swap="innerHTML"
+        ></tbody>
+      </table>
+    </div>
+  </aside>
+
+  <!-- Map -->
+  <div id="map"></div>
+</div>
+
+<!-- Alert toasts -->
+<div id="alert-container"></div>
+
+<script>
+// ── Map setup ──────────────────────────────────────────────────────────────
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      'carto-dark': {
+        type: 'raster',
+        tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+      }
+    },
+    layers: [{ id: 'carto-dark', type: 'raster', source: 'carto-dark' }]
+  },
+  center: [103.8, 1.3],
+  zoom: 5,
+});
+
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+let currentGeoJson = { type: 'FeatureCollection', features: [] };
+
+map.on('load', () => {
+  map.addSource('vessels', { type: 'geojson', data: currentGeoJson });
+
+  map.addLayer({
+    id: 'vessels-circle',
+    type: 'circle',
+    source: 'vessels',
+    paint: {
+      'circle-radius': 7,
+      'circle-color': [
+        'case',
+        ['>=', ['get', 'confidence'], 0.7], 'rgba(220,38,38,0.85)',
+        ['>=', ['get', 'confidence'], 0.4], 'rgba(245,158,11,0.85)',
+        'rgba(34,197,94,0.85)'
+      ],
+      'circle-stroke-width': 1,
+      'circle-stroke-color': 'rgba(255,255,255,0.3)',
+    }
+  });
+
+  map.on('click', 'vessels-circle', (e) => {
+    const p = e.features[0].properties;
+    new maplibregl.Popup({ closeButton: true, className: 'vessel-popup' })
+      .setLngLat(e.lngLat)
+      .setHTML(
+        `<strong>${p.vessel_name}</strong><br/>` +
+        `MMSI: ${p.mmsi}<br/>` +
+        `Flag: ${p.flag} &nbsp;|&nbsp; Type: ${p.vessel_type}<br/>` +
+        `Confidence: <strong>${parseFloat(p.confidence).toFixed(2)}</strong><br/>` +
+        `Last seen: ${p.last_seen}`
+      )
+      .addTo(map);
+  });
+
+  map.on('mouseenter', 'vessels-circle', () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', 'vessels-circle', () => { map.getCanvas().style.cursor = ''; });
+
+  // Initial data load
+  refreshMap();
+  loadMetrics();
+  loadVesselTypes();
+  startAlertStream();
+});
+
+// ── Filter state ───────────────────────────────────────────────────────────
+function getFilters() {
+  const minConf = parseFloat(document.getElementById('min-conf').value);
+  const topN = parseInt(document.getElementById('top-n').value, 10);
+  const sel = document.getElementById('vessel-type-select');
+  const types = Array.from(sel.selectedOptions).map(o => o.value);
+  return { minConf, topN, types };
+}
+
+function buildQueryString({ minConf, topN, types }) {
+  const params = new URLSearchParams();
+  params.set('min_confidence', minConf);
+  params.set('top_n', topN);
+  types.forEach(t => params.append('vessel_types', t));
+  return params.toString();
+}
+
+function applyFilters() {
+  const f = getFilters();
+  const qs = buildQueryString(f);
+
+  // Refresh table via HTMX
+  const tbody = document.getElementById('watchlist-tbody');
+  htmx.ajax('GET', `/api/watchlist/top?${qs}`, { target: '#watchlist-tbody', swap: 'innerHTML' });
+
+  // Refresh map
+  refreshMap(f);
+  updateKPIs(f);
+}
+
+function refreshMap(f) {
+  f = f || getFilters();
+  const qs = buildQueryString(f);
+  fetch(`/api/vessels/geojson?${qs}`)
+    .then(r => r.json())
+    .then(data => {
+      currentGeoJson = data;
+      if (map.getSource('vessels')) {
+        map.getSource('vessels').setData(data);
+      }
+      updateKPIsFromGeoJson(data, f.minConf);
+    })
+    .catch(console.error);
+}
+
+function updateKPIsFromGeoJson(gj, minConf) {
+  const features = gj.features || [];
+  const total = features.length;
+  const high = features.filter(f => f.properties.confidence >= 0.75).length;
+  const avg = total > 0
+    ? (features.reduce((s, f) => s + f.properties.confidence, 0) / total).toFixed(2)
+    : '—';
+  document.getElementById('kpi-total').textContent = total;
+  document.getElementById('kpi-high').textContent = high;
+  document.getElementById('kpi-avg').textContent = avg;
+}
+
+function updateKPIs(f) {
+  // KPIs are updated when GeoJSON arrives via updateKPIsFromGeoJson
+}
+
+function loadMetrics() {
+  fetch('/api/metrics')
+    .then(r => r.json())
+    .then(m => {
+      if (!m.available) return;
+      document.getElementById('kpi-metrics').style.display = '';
+      document.getElementById('kpi-p50').textContent = m.precision_at_50 != null ? m.precision_at_50.toFixed(2) : '—';
+      document.getElementById('kpi-recall').style.display = '';
+      document.getElementById('kpi-r200').textContent = m.recall_at_200 != null ? m.recall_at_200.toFixed(2) : '—';
+      document.getElementById('kpi-auroc-wrap').style.display = '';
+      document.getElementById('kpi-auroc').textContent = m.auroc != null ? m.auroc.toFixed(2) : 'N/A';
+    })
+    .catch(console.error);
+}
+
+function loadVesselTypes() {
+  fetch('/api/vessel-types')
+    .then(r => r.json())
+    .then(types => {
+      const sel = document.getElementById('vessel-type-select');
+      types.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        opt.selected = true;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(console.error);
+}
+
+// ── SSE alert stream ───────────────────────────────────────────────────────
+function startAlertStream() {
+  const es = new EventSource('/api/alerts/stream');
+  es.onmessage = (e) => {
+    let data;
+    try { data = JSON.parse(e.data); } catch { return; }
+    if (data.error) return;
+
+    const container = document.getElementById('alert-container');
+    const toast = document.createElement('div');
+    toast.className = 'alert-toast';
+    toast.innerHTML = `&#9888; <strong>${data.vessel_name}</strong> (${data.mmsi})<br/>Confidence: ${parseFloat(data.confidence).toFixed(2)} &bull; Flag: ${data.flag}`;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 8000);
+  };
+  es.onerror = () => { /* reconnect is automatic */ };
+}
+</script>
+
+<style>
+.maplibregl-popup-content {
+  background: #1a1f2e;
+  color: #e2e8f0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+.maplibregl-popup-tip { border-top-color: #1a1f2e; }
+</style>
+
+</body>
+</html>
