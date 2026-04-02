@@ -88,14 +88,15 @@ def load_behavior_frame(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
 
 def load_cleared_mmsis(db_path: str = DEFAULT_DB_PATH) -> frozenset[str]:
     """Return the set of MMSIs that passed a Phase B physical inspection (cleared)."""
-    con = duckdb.connect(db_path, read_only=True)
     try:
-        rows = con.execute("SELECT mmsi FROM cleared_vessels").fetchall()
-        return frozenset(r[0] for r in rows)
+        con = duckdb.connect(db_path, read_only=True)
+        try:
+            rows = con.execute("SELECT mmsi FROM cleared_vessels").fetchall()
+            return frozenset(r[0] for r in rows)
+        finally:
+            con.close()
     except Exception:
         return frozenset()
-    finally:
-        con.close()
 
 
 def _cluster_group(
