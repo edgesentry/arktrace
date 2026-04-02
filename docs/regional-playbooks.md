@@ -202,16 +202,12 @@ uv run python src/ingest/marine_cadastre.py \
   --year 2023 --db data/processed/gulf.duckdb
 ```
 
-Note: Marine Cadastre covers US coastal zones. Gulf of Mexico data is in zones 14–16. The bbox filter in `load_csv_to_duckdb()` (`-5°–22°N, 92°–122°E`) is hardcoded for Singapore and **will filter out all Gulf data**. The workaround is to call the function directly with a custom bbox:
+Note: Marine Cadastre covers US coastal zones. Gulf of Mexico data is in zones 14–16. Pass `--bbox` to override the default Singapore filter:
 
-```python
-from src.ingest.marine_cadastre import load_csv_to_duckdb
-from pathlib import Path
-
-GULF_BBOX = {"lat_min": 8.0, "lat_max": 32.0, "lon_min": -98.0, "lon_max": -60.0}
-load_csv_to_duckdb(Path("data/raw/marine_cadastre/2023/AISVesselTracks2023.csv"),
-                   db_path="data/processed/gulf.duckdb",
-                   bbox=GULF_BBOX)
+```bash
+uv run python src/ingest/marine_cadastre.py \
+  --year 2023 --db data/processed/gulf.duckdb \
+  --bbox 8 -98 32 -60
 ```
 
 **A3 — Feature engineering**
@@ -253,7 +249,7 @@ WATCHLIST_OUTPUT_PATH=data/processed/gulf_watchlist.parquet \
 
 ### Workarounds
 
-**Marine Cadastre bbox is hardcoded for Singapore:** See the Python snippet above. The `bbox` parameter of `load_csv_to_duckdb()` accepts any dict with `lat_min`, `lat_max`, `lon_min`, `lon_max` — only the CLI default is Singapore.
+**Marine Cadastre bbox:** The CLI defaults to Singapore. Pass `--bbox lat_min lon_min lat_max lon_max` to override, e.g. `--bbox 8 -98 32 -60` for the Gulf.
 
 **Composite weights:** Pass flags directly to `composite.py`:
 
