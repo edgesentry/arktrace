@@ -8,8 +8,10 @@
 
 - `pyproject.toml` with full dependency set (DuckDB, Polars, Neo4j driver, scikit-learn, SHAP, Streamlit)
 - DuckDB schema initialisation (`src/ingest/schema.py`)
-- Marine Cadastre bulk Parquet download + DuckDB load (`src/ingest/marine_cadastre.py`)
-- aisstream.io WebSocket ingestion with bounding box filter (`src/ingest/ais_stream.py`)
+- Marine Cadastre annual archive download + DuckDB load (`src/ingest/marine_cadastre.py`) — US coastal waters only; takes `--year` flag (annual files); see [regional-playbooks.md](regional-playbooks.md) for non-US historical backfill options
+- aisstream.io WebSocket ingestion with configurable bounding box (`src/ingest/ais_stream.py`) — supports `--bbox lat_min lon_min lat_max lon_max` override for multi-region deployment
+- Neo4j Docker lifecycle scripts (`scripts/start_neo4j.sh`, `scripts/stop_neo4j.sh`)
+- End-to-end local test guide (`docs/local-e2e-test.md`)
 
 **Acceptance:** DuckDB `ais_positions` table contains ≥ 6 months of AIS data for the configured area of interest (default: Malacca Strait / SG; see [regional-playbooks.md](regional-playbooks.md) for other regions) with no duplicate MMSI/timestamp rows.
 
@@ -36,7 +38,7 @@
 - Identity volatility features: `flag_changes_2y`, `name_changes_2y`, `owner_changes_2y` (`src/features/identity.py`)
 - Ownership graph features (Neo4j GDS BFS): `sanctions_distance`, `cluster_sanctions_ratio` (`src/features/ownership_graph.py`)
 - Trade flow mismatch: `route_cargo_mismatch` (`src/features/trade_mismatch.py`)
-- GEBCO bathymetric mask: H3 hexagon set for the 200m-depth boundary; used to filter STS candidates to plausible draught zones (`src/features/bathymetric_mask.py`)
+- ~~GEBCO bathymetric mask (`src/features/bathymetric_mask.py`)~~ — **not implemented**; STS candidate detection uses a 5nm-from-port filter as a proxy; bathymetric masking deferred to C4
 
 **Acceptance:** `vessel_features` table in DuckDB has one row per MMSI with no null values for core features; STS candidate count matches independently verified events from open-source maritime incident reports.
 
@@ -166,6 +168,15 @@ SHAP `top_signals` explain *which features* drove a flag but not *why those feat
 - Local LLM (Ollama) generates a one-paragraph analyst brief: "Vessel flagged due to 3 ownership changes in 6 months; last change coincides with OFAC designation of managing company on [date]"
 
 This keeps the stack fully offline-capable (no cloud LLM dependency) and satisfies the Cap Vista explainability requirement at the human-analyst level.
+
+### C4 · Multi-Region CLI Hardening
+
+Several parameters currently require direct code edits when deploying to non-default regions (documented in [regional-playbooks.md](regional-playbooks.md)):
+
+- `--gap-threshold-hours` flag on `src/features/ais_behavior.py` (currently hardcoded at 6h; Japan Sea and Middle East require 12h+)
+- `--w-anomaly`, `--w-graph`, `--w-identity` weight flags on `src/score/composite.py` (currently hardcoded at 0.4 / 0.4 / 0.2)
+- `--bbox` on `src/ingest/marine_cadastre.py` CLI (bbox currently only settable via Python call for non-Singapore regions)
+- GEBCO bathymetric mask (`src/features/bathymetric_mask.py`) — deferred from A3; provides higher-precision STS candidate filtering than the current 5nm-from-port heuristic
 
 ### C3 · Causal Sanction-Response Model
 
