@@ -164,10 +164,14 @@ All configurable paths are also settable via environment variables (useful in Do
 | `NEO4J_URI` | `bolt://localhost:7687` | Neo4j connection string |
 | `NEO4J_USER` | `neo4j` | Neo4j username |
 | `NEO4J_PASSWORD` | `neo4jpassword` | Neo4j password |
+| `LLM_PROVIDER` | `openai` | LLM client: `openai`, `anthropic`, `gemini`, `mlx`, `ollama` |
+| `LLM_BASE_URL` | — | OpenAI-compatible base URL (required for `gemini`, `mlx`, `ollama`) |
+| `LLM_MODEL` | — | Model identifier (e.g., `gpt-4o-mini`, `llama3.2:3b`) |
 | `WATCHLIST_OUTPUT_PATH` | `data/processed/candidate_watchlist.parquet` | Watchlist parquet output |
 | `COMPOSITE_SCORES_PATH` | `data/processed/composite_scores.parquet` | Composite scores output |
 | `CAUSAL_EFFECTS_PATH` | `data/processed/causal_effects.parquet` | C3 output |
 | `VALIDATION_METRICS_PATH` | `data/processed/validation_metrics.json` | Metrics for dashboard |
+
 
 ---
 
