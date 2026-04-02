@@ -164,7 +164,12 @@ def _compute_top_signals(feature_df: pl.DataFrame, model, scaled_matrix: np.ndar
         return pl.Series("top_signals", _top_signals_fallback(feature_df))
 
 
-def compute_composite_scores(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
+def compute_composite_scores(
+    db_path: str = DEFAULT_DB_PATH,
+    w_anomaly: float = 0.4,
+    w_graph: float = 0.4,
+    w_identity: float = 0.2,
+) -> pl.DataFrame:
     feature_df = load_feature_frame(db_path)
     context_df = load_watchlist_context(db_path)
     if feature_df.is_empty() or context_df.is_empty():
@@ -182,7 +187,7 @@ def compute_composite_scores(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
     ])
 
     scored = scored.with_columns([
-        (0.4 * pl.col("anomaly_score") + 0.4 * pl.col("graph_risk_score") + 0.2 * pl.col("identity_score"))
+        (w_anomaly * pl.col("anomaly_score") + w_graph * pl.col("graph_risk_score") + w_identity * pl.col("identity_score"))
         .clip(0.0, 1.0)
         .alias("confidence"),
         pl.col("ship_type").map_elements(_ship_type_label, return_dtype=pl.Utf8).alias("vessel_type"),
@@ -226,9 +231,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Compute composite watchlist scores")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
+    parser.add_argument("--w-anomaly", type=float, default=0.4,
+                        help="Weight for anomaly score (default: 0.4)")
+    parser.add_argument("--w-graph", type=float, default=0.4,
+                        help="Weight for graph risk score (default: 0.4)")
+    parser.add_argument("--w-identity", type=float, default=0.2,
+                        help="Weight for identity score (default: 0.2)")
     args = parser.parse_args()
 
-    df = compute_composite_scores(args.db)
+    df = compute_composite_scores(args.db, args.w_anomaly, args.w_graph, args.w_identity)
     write_composite_scores(df, args.output)
     print(f"Composite rows written: {df.height}")
 
