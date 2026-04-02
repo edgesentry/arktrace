@@ -43,10 +43,16 @@ def _color_for_confidence(value: float) -> list[int]:
     return [34, 197, 94, 180]
 
 
-def _map_frame(df: pl.DataFrame) -> pl.DataFrame:
-    return df.filter(pl.col("last_lat").is_not_null() & pl.col("last_lon").is_not_null()).with_columns(
-        pl.col("confidence").map_elements(_color_for_confidence, return_dtype=pl.List(pl.Int64)).alias("color")
+def _map_frame(df: pl.DataFrame) -> list[dict]:
+    rows = (
+        df.filter(pl.col("last_lat").is_not_null() & pl.col("last_lon").is_not_null())
+        .with_columns(pl.col("last_seen").cast(pl.Utf8))
+        .select(["mmsi", "vessel_name", "flag", "confidence", "last_lat", "last_lon", "last_seen"])
+        .to_dicts()
     )
+    for row in rows:
+        row["color"] = _color_for_confidence(row["confidence"])
+    return rows
 
 
 def main() -> None:
@@ -65,7 +71,8 @@ def main() -> None:
         min_confidence = st.slider("Minimum confidence", 0.0, 1.0, 0.4, 0.05)
         vessel_types = sorted(watchlist["vessel_type"].unique().to_list())
         selected_types = st.multiselect("Vessel types", vessel_types, default=vessel_types)
-        top_n = st.slider("Top N rows", 10, min(500, watchlist.height), min(50, watchlist.height))
+        _top_n_max = max(10, min(500, watchlist.height))
+        top_n = st.slider("Top N rows", 1, _top_n_max, min(50, watchlist.height))
 
     filtered = watchlist.filter(
         (pl.col("confidence") >= min_confidence) & (pl.col("vessel_type").is_in(selected_types))
@@ -88,21 +95,21 @@ def main() -> None:
 
     with left:
         st.subheader("Map")
-        map_df = _map_frame(filtered)
-        if map_df.is_empty():
+        map_data = _map_frame(filtered)
+        if not map_data:
             st.info("No candidate positions available for the current filters.")
         else:
             layer = pdk.Layer(
                 "ScatterplotLayer",
-                data=map_df.to_dicts(),
+                data=map_data,
                 get_position="[last_lon, last_lat]",
                 get_fill_color="color",
                 get_radius=20000,
                 pickable=True,
             )
             view_state = pdk.ViewState(
-                latitude=float(map_df["last_lat"].mean()),
-                longitude=float(map_df["last_lon"].mean()),
+                latitude=float(sum(r["last_lat"] for r in map_data) / len(map_data)),
+                longitude=float(sum(r["last_lon"] for r in map_data) / len(map_data)),
                 zoom=4,
             )
             st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{vessel_name}\nConfidence: {confidence}"}))
