@@ -283,8 +283,6 @@ def step_neo4j(p: RegionPreset, non_interactive: bool) -> bool:
 
 
 def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int = 0) -> bool:
-    import signal as _signal
-
     lat_min, lon_min, lat_max, lon_max = p.bbox
 
     if non_interactive and stream_duration == 0:
@@ -292,8 +290,8 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int
         print(_dim("(skipped — pass --stream-duration N to collect N seconds of live AIS)"))
         return True
 
-    duration_note = f"  stopping after {stream_duration}s" if stream_duration else "  Ctrl-C to stop"
-    _step(3, TOTAL_STEPS, f"Streaming AIS ({duration_note.strip()})...")
+    duration_note = f"stopping after {stream_duration}s" if stream_duration else "Ctrl-C to stop"
+    _step(3, TOTAL_STEPS, f"Streaming AIS ({duration_note})...")
     print()
     print(f"      bbox {p.bbox}  flush every 60s")
 
@@ -302,36 +300,31 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int
         "--db", p.db_path,
         "--bbox", str(lat_min), str(lon_min), str(lat_max), str(lon_max),
     ]
-    def _stop_proc(proc: subprocess.Popen, label: str) -> None:
-        proc.send_signal(_signal.SIGINT)
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-        print(f"      {label}  {_green('✓')}")
+    if stream_duration:
+        # ais_stream handles its own deadline internally — no cross-process signalling needed
+        cmd += ["--duration", str(stream_duration)]
+        result = _run(cmd)
+        if result.returncode == 0:
+            _ok()
+        else:
+            _fail(f"exit code {result.returncode}")
+        return result.returncode == 0
 
-    proc = subprocess.Popen(cmd, env=os.environ.copy())
+    # Interactive: stream indefinitely until Ctrl-C
     try:
-        proc.wait(timeout=stream_duration if stream_duration else None)
-    except subprocess.TimeoutExpired:
-        _stop_proc(proc, f"Streaming stopped after {stream_duration}s.")
-        return True
+        proc = subprocess.Popen(cmd, env=os.environ.copy())
+        proc.wait()
     except KeyboardInterrupt:
-        _stop_proc(proc, "^C  Ingestion stopped.")
+        proc.send_signal(__import__("signal").SIGINT)
+        proc.wait()
+        print(f"      ^C  Ingestion stopped.  {_green('✓')}")
         return True
 
-    if proc.returncode == 0 or proc.returncode == -_signal.SIGINT:
+    if proc.returncode == 0:
         _ok()
         return True
 
     _fail(f"exit code {proc.returncode}")
-    if non_interactive:
-        return False
     return _ask_retry_skip("AIS streaming") == "skip"
 
 

@@ -114,8 +114,13 @@ async def stream(
     bbox: list = BBOX,
     batch_size: int = DEFAULT_BATCH_SIZE,
     flush_interval: float = DEFAULT_FLUSH_INTERVAL,
+    duration: float = 0,
 ) -> None:
-    """Connect to aisstream.io and ingest position reports until interrupted."""
+    """Connect to aisstream.io and ingest position reports until interrupted.
+
+    Args:
+        duration: Stop automatically after this many seconds (0 = run until Ctrl-C).
+    """
     init_schema(db_path)
 
     subscription = {
@@ -126,7 +131,6 @@ async def stream(
 
     batch: list[dict] = []
     total_inserted = 0
-    last_flush = asyncio.get_event_loop().time()
 
     stop_event = asyncio.Event()
 
@@ -138,14 +142,21 @@ async def stream(
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _handle_signal)
 
+    deadline: float | None = (loop.time() + duration) if duration > 0 else None
+
     print(f"Connecting to {WEBSOCKET_URL} …")
     async with websockets.connect(WEBSOCKET_URL) as ws:
         await ws.send(json.dumps(subscription))
         print(f"Subscribed — bbox {bbox}, batch_size={batch_size}, flush_interval={flush_interval}s")
+        last_flush = loop.time()
 
         while not stop_event.is_set():
+            if deadline is not None and loop.time() >= deadline:
+                break
+
+            recv_timeout = min(1.0, deadline - loop.time()) if deadline is not None else 1.0
             try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
+                raw = await asyncio.wait_for(ws.recv(), timeout=max(recv_timeout, 0.1))
             except asyncio.TimeoutError:
                 continue
             except websockets.ConnectionClosed:
@@ -191,6 +202,12 @@ if __name__ == "__main__":
         metavar=("LAT_MIN", "LON_MIN", "LAT_MAX", "LON_MAX"),
         help="Bounding box override, e.g. --bbox 25 120 50 150 for seas near Japan",
     )
+    parser.add_argument(
+        "--duration",
+        type=float, default=0,
+        metavar="SECONDS",
+        help="Stop streaming after this many seconds (default: 0 = run until Ctrl-C)",
+    )
     args = parser.parse_args()
 
     api_key = os.getenv("AISSTREAM_API_KEY")
@@ -199,4 +216,4 @@ if __name__ == "__main__":
 
     bbox = [[args.bbox[0], args.bbox[1]], [args.bbox[2], args.bbox[3]]] if args.bbox else BBOX
     asyncio.run(stream(api_key, db_path=args.db, bbox=bbox, batch_size=args.batch_size,
-                       flush_interval=args.flush_interval))
+                       flush_interval=args.flush_interval, duration=args.duration))
