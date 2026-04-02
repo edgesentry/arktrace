@@ -444,7 +444,8 @@ def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
             env=merged_env,
         )
     except KeyboardInterrupt:
-        pass
+        # Treat Ctrl+C as a normal, user-requested cancellation of the dashboard.
+        print(_dim("Dashboard interrupted by user."))
     return True
 
 
