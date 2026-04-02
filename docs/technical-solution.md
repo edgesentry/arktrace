@@ -9,8 +9,9 @@
 | Graph DB | **Neo4j Community** | ≥ 5.x | Cypher + GDS plugin for BFS, PageRank, community detection; Docker deployment |
 | ML / clustering | **scikit-learn** | ≥ 1.5 | HDBSCAN, Isolation Forest; no GPU required |
 | Explainability | **SHAP** | ≥ 0.46 | TreeExplainer for Isolation Forest; per-vessel feature attribution |
-| PoC dashboard | **Streamlit** | ≥ 1.35 | Rapid map + table UI; no frontend build toolchain |
+| Dashboard | **FastAPI + HTMX** | ≥ 0.115 / — | Production-grade API layer + partial-page updates; SSE alerts; MapLibre GL JS |
 | AIS streaming | **websockets** + **httpx** | — | aisstream.io WebSocket; Marine Cadastre HTTP download |
+| Causal inference | **numpy / scipy** (built-in) | — | DiD OLS with HC3 robust SEs; no external causal library required |
 | Language | **Python 3.12** | — | Best ecosystem fit for all above |
 | Packaging | **uv** | — | Fast lockfile-based dependency management |
 
@@ -141,7 +142,38 @@ HDBSCAN clusters vessels by their behavioral feature vector (gap frequency, spee
 
 Trained on the subset of vessels with `sanctions_distance ≥ 3` (proxy for "clean"). The decision function is calibrated to `[0,1]` using a sigmoid fit against the OFAC-listed vessel validation set.
 
----
+### C3 · Causal Sanction-Response Model (DiD)
+
+Implemented in `src/score/causal_sanction.py`. Quantifies the *causal* effect of sanction announcement events on AIS gap frequency for vessels connected within 2 hops in the Neo4j ownership graph.
+
+**Model specification** (for each regime × announcement date):
+
+```
+outcome_{it} = β₀ + β₁·treated_i + β₂·post_t + β₃·(treated_i × post_t)
+             + γ_v (vessel-type fixed effects)
+             + δ_r (route-corridor fixed effects)
+             + ε_{it}
+```
+
+| Term | Meaning |
+|---|---|
+| `treated_i` | 1 if vessel has `sanctions_distance ≤ 2` |
+| `post_t` | 1 if observation is in the 30-day window *after* the announcement date |
+| **β₃ (ATT)** | **Average Treatment Effect on Treated: extra AIS gaps per 30 days attributable to the announcement** |
+| `vessel-type FEs` | One dummy per AIS `ship_type` bucket (tanker, cargo, passenger, other) |
+| `route-corridor FEs` | One dummy per geographic corridor (Malacca, Persian Gulf, Red Sea, North Sea, …) |
+
+OLS is estimated with **HC3 heteroskedasticity-robust standard errors** (implemented in pure numpy—no statsmodels dependency). Multiple announcement dates per regime are pooled via **inverse-variance weighting**.
+
+**Output:** Per-regime ATT estimate + 95% CI. `calibrate_graph_weight(effects)` converts the fraction of positive-significant estimates into a `w_graph` value ∈ [0.20, 0.65] suitable for `--w-graph` in `src/score/composite.py`.
+
+**Supported regimes:**
+
+| Regime key | Label | Announcement dates |
+|---|---|---|
+| `OFAC_Iran` | OFAC Iran | 2012-03-15, 2019-05-08, 2020-01-10 |
+| `OFAC_Russia` | OFAC Russia | 2022-02-24, 2022-09-15, 2023-02-24 |
+| `UN_DPRK` | UN DPRK | 2017-08-05, 2017-09-11, 2017-12-22 |
 
 ## Output Schema
 
@@ -173,6 +205,21 @@ Trained on the subset of vessels with `sanctions_distance ≥ 3` (proxy for "cle
 | `shared_address_centrality` | `i32` | Vessels sharing the same registered address in ownership chain |
 | `sts_hub_degree` | `i32` | Distinct vessels contacted in STS co-location events |
 
+`data/processed/causal_effects.parquet` (written by `src/score/causal_sanction.py`)
+
+| Column | Type | Description |
+|---|---|---|
+| `regime` | `str` | Regime key (`OFAC_Iran`, `OFAC_Russia`, `UN_DPRK`) |
+| `label` | `str` | Human-readable regime label |
+| `n_treated` | `i32` | Treated vessel count |
+| `n_control` | `i32` | Control vessel count |
+| `att_estimate` | `f64` | Pooled ATT (extra AIS gaps / 30 days) |
+| `att_ci_lower` | `f64` | 95% CI lower bound |
+| `att_ci_upper` | `f64` | 95% CI upper bound |
+| `p_value` | `f64` | Two-tailed p-value |
+| `is_significant` | `bool` | True if p < 0.05 |
+| `calibrated_weight` | `f64` | Suggested `w_graph` for `composite.py` |
+
 ### Example `top_signals` field
 
 ```json
@@ -193,7 +240,7 @@ Known OFAC-listed vessels (those already on the SDN list at time of analysis) ar
 - **Recall@200**: fraction of all OFAC-listed vessels captured in top-200
 - **AUROC**: area under ROC curve across all scored vessels
 
-This validation is run in `src/score/validate.py` and reported in the Streamlit dashboard.
+This validation is run in `src/score/validate.py` and reported in the FastAPI + HTMX dashboard.
 
 ---
 
@@ -207,7 +254,8 @@ The full pipeline (historical AIS + scoring) runs on a standard laptop:
 | Feature engineering (Polars) | ~10 min | ~2 GB |
 | Neo4j graph build | ~15 min | ~1 GB |
 | HDBSCAN + Isolation Forest | ~5 min | ~1 GB |
+| C3 causal DiD model | ~1 min | ~0.5 GB |
 | SHAP attribution | ~10 min | ~2 GB |
-| **Total** | **~45 min** | **~4 GB peak** |
+| **Total** | **~46 min** | **~4 GB peak** |
 
 For live streaming (aisstream.io), the incremental update pipeline runs in under 60 seconds per batch.

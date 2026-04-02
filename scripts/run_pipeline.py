@@ -534,17 +534,47 @@ def step_features(p: RegionPreset, non_interactive: bool, seed_dummy: bool = Fal
     return True
 
 
+def _calibrate_graph_weight(db_path: str, preset_w_graph: float) -> float:
+    """
+    Run the C3 causal sanction-response model and return the calibrated w_graph.
+
+    Falls back to *preset_w_graph* if the model cannot be run (e.g. insufficient
+    AIS data in the DB) so the pipeline never hard-fails because of C3.
+    """
+    try:
+        from src.score.causal_sanction import calibrate_graph_weight, run_causal_model, effects_to_dataframe, write_effects
+        causal_output = db_path.replace(".duckdb", "_causal_effects.parquet")
+        effects = run_causal_model(db_path)
+        df = effects_to_dataframe(effects)
+        write_effects(df, causal_output)
+        w = calibrate_graph_weight(effects)
+        return w
+    except Exception:
+        return preset_w_graph
+
+
 def step_score(p: RegionPreset, non_interactive: bool) -> bool:
     _step(8, TOTAL_STEPS, "Scoring...")
     env = {"DB_PATH": p.db_path}
+
+    # C3: calibrate graph_risk_score weight before composite scoring
+    w_graph = _calibrate_graph_weight(p.db_path, p.w_graph)
+    # Re-distribute remaining weight proportionally between anomaly and identity
+    remaining = 1.0 - w_graph
+    ratio = p.w_anomaly / max(p.w_anomaly + p.w_identity, 1e-9)
+    w_anomaly = round(remaining * ratio, 4)
+    w_identity = round(remaining * (1.0 - ratio), 4)
+    # Guard against floating-point drift
+    w_anomaly = round(1.0 - w_graph - w_identity, 4)
+
     cmds = [
         ([sys.executable, "-m", "src.score.mpol_baseline", "--db", p.db_path], "mpol_baseline"),
         ([sys.executable, "-m", "src.score.anomaly", "--db", p.db_path], "anomaly"),
         ([sys.executable, "-m", "src.score.composite",
           "--db", p.db_path,
-          "--w-anomaly", str(p.w_anomaly),
-          "--w-graph", str(p.w_graph),
-          "--w-identity", str(p.w_identity)], "composite"),
+          "--w-anomaly", str(w_anomaly),
+          "--w-graph", str(w_graph),
+          "--w-identity", str(w_identity)], "composite"),
         ([sys.executable, "-m", "src.score.watchlist",
           "--db", p.db_path,
           "--output", os.getenv("WATCHLIST_OUTPUT_PATH", p.watchlist_path)], "watchlist"),

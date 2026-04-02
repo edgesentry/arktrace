@@ -53,8 +53,10 @@
 │  HDBSCAN ── normal MPOL baseline (per vessel type / route)      │
 │  Isolation Forest ── anomaly_score ∈ [0,1]                      │
 │  Neo4j BFS ── graph_risk_score ∈ [0,1]                          │
-│  Composite ── confidence = 0.4·anomaly + 0.4·graph              │
-│                           + 0.2·identity_volatility             │
+│  C3 DiD model ─ calibrate graph_risk_score weight (→ composite) │
+│  Composite ── confidence = w_a·anomaly + w_g·graph              │
+│                           + w_i·identity_volatility             │
+│              (weights calibrated by causal_sanction.py)         │
 │  SHAP ── top_signals JSON per vessel                            │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
@@ -182,15 +184,40 @@ HDBSCAN clusters vessels by behavioral profile (speed pattern, route regularity,
 
 Isolation Forest is trained on the full feature matrix of vessels with `sanctions_distance ≥ 3` (assumed clean) to learn normal behavior. The resulting anomaly scores are calibrated to `[0,1]`.
 
+### C3 · Causal Sanction-Response Model (DiD)
+
+`src/score/causal_sanction.py` quantifies whether AIS gap frequency *causally increases* after sanction announcements for vessels connected (within 2 Neo4j hops) to sanctioned entities. This is used to calibrate the `graph_risk_score` weight in the composite formula.
+
+For each regime (OFAC Iran, OFAC Russia, UN DPRK) the model fits a Difference-in-Differences (DiD) regression:
+
+```
+outcome_{it} = β₀ + β₁·treated_i + β₂·post_t + β₃·(treated_i × post_t)
+             + vessel_type FEs + route_corridor FEs + ε_{it}
+```
+
+where **β₃ (ATT)** is the sanction-attributable increase in AIS gaps per 30 days. OLS is estimated with HC3 heteroskedasticity-robust standard errors. Multiple announcement dates per regime are pooled via inverse-variance weighting.
+
+**Weight calibration:** `calibrate_graph_weight(effects)` maps the fraction of positive-significant ATT estimates to a `w_graph` value in **[0.20, 0.65]**. Pass it to `compute_composite_scores()` via `--w-graph`:
+
+```bash
+# Calibrate then score
+uv run python src/score/causal_sanction.py --output data/processed/causal_effects.parquet
+uv run python src/score/composite.py --w-graph <calibrated_value>
+```
+
+Outputs: `data/processed/causal_effects.parquet` — regime, n_treated, n_control, ATT estimate, 95% CI, p-value, is_significant, calibrated_weight.
+
 ### Composite Score
 
 ```
-confidence = 0.4 × anomaly_score
-           + 0.4 × graph_risk_score
-           + 0.2 × identity_volatility_score
+confidence = w_anomaly × anomaly_score
+           + w_graph   × graph_risk_score
+           + w_identity × identity_volatility_score
 ```
 
-Default weights emphasise behavioral and graph signals equally, with identity as a tiebreaker. Per-region weight tuning is documented in [regional-playbooks.md](regional-playbooks.md) — currently requires a direct edit to `src/score/composite.py:185` (no CLI flag yet).
+Default weights: `w_anomaly = 0.4`, `w_graph = 0.4`, `w_identity = 0.2`. All three are configurable via `--w-anomaly`, `--w-graph`, `--w-identity` CLI flags on `src/score/composite.py`. The C3 causal model provides a data-driven `w_graph` calibration (see section above and [roadmap.md](roadmap.md) Phase C, C3).
+
+Per-region weight tuning recommendations are in [regional-playbooks.md](regional-playbooks.md).
 
 ### Explainability (SHAP)
 

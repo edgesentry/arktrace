@@ -136,10 +136,13 @@ A successful run ends with:
 [10/10] Launching dashboard...                     (skipped in non-interactive mode)
 ```
 
+> **Note on composite weights:** Step 8 automatically runs the C3 causal sanction-response model before `composite.py`. If enough AIS data is present to estimate a statistically significant treatment effect, the `w_graph` used will differ from the preset value shown in the region summary above. The calibrated value is logged to `data/processed/<region>_causal_effects.parquet`.
+
 Output files written to `./data/processed/`:
 
 - `<region>.duckdb` — DuckDB database for that region's raw data
 - `candidate_watchlist.parquet` — ranked candidate watchlist (read by the dashboard)
+- `<region>_causal_effects.parquet` — per-regime DiD ATT estimates and calibrated `w_graph` (C3)
 - `gdelt.lance/` — LanceDB vector store for analyst briefs
 
 ---
@@ -160,6 +163,24 @@ cat data/processed/validation_metrics.json
 ```
 
 **Analyst briefs (C2):** click any map marker → **Get Brief**. A one-paragraph brief citing recent GDELT events streams into the popup. Requires LLM credentials in `.env`. Best-effort — displays "Brief unavailable" if no LLM is reachable.
+
+**Causal effects (C3):** the pipeline writes `data/processed/<region>_causal_effects.parquet` during Step 8. To verify it manually:
+
+1. Open the file in DuckDB CLI or any Parquet viewer:
+   ```bash
+   duckdb -c "SELECT label, n_treated, n_control, round(att_estimate,3) AS att, round(p_value,4) AS p, is_significant, round(calibrated_weight,3) AS w_graph FROM 'data/processed/singapore_causal_effects.parquet';"
+   ```
+2. Expect **3 rows** — one each for OFAC Iran, OFAC Russia, and UN DPRK.
+3. With sparse AIS data (no live streaming), `n_treated` / `n_control` will be small and `is_significant = false` — the pipeline correctly falls back to the preset `w_graph`. With ≥ 30 days of real AIS data, significant positive ATT estimates raise `w_graph` above the 0.40 default (up to 0.65).
+4. `calibrated_weight` must be the same value in all three rows — it is a single pipeline-level scalar.
+
+To run the automated structural checks against the output file:
+
+```bash
+uv run pytest tests/test_causal_effects_output.py -v
+```
+
+The test skips automatically if the pipeline has not been run yet.
 
 ---
 

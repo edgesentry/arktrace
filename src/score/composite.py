@@ -1,4 +1,16 @@
-"""Build composite confidence scores and signal explanations."""
+"""Build composite confidence scores and signal explanations.
+
+Weight calibration
+------------------
+The ``w_graph`` parameter (default 0.40) can be automatically calibrated using
+the C3 causal sanction-response model::
+
+    from src.score.causal_sanction import run_causal_model, calibrate_graph_weight
+    effects = run_causal_model(db_path)
+    w_graph = calibrate_graph_weight(effects)
+
+See ``src/score/causal_sanction.py`` and ``docs/roadmap.md`` Phase C, C3.
+"""
 
 from __future__ import annotations
 
