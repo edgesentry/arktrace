@@ -24,7 +24,7 @@ from typing import Protocol, runtime_checkable
 class LLMClient(Protocol):
     async def chat(self, system: str, user: str) -> AsyncIterator[str]:
         """Stream response tokens for a system + user message pair."""
-        ...
+        pass
 
 
 class OpenAICompatClient:
