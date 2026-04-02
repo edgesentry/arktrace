@@ -134,7 +134,7 @@ def main() -> None:
             "confidence",
             "top_signals",
         ]).to_pandas()
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width="stretch", hide_index=True)
 
     st.subheader("Top signals")
     top_row = filtered.head(1)
