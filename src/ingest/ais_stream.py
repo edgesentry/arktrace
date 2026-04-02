@@ -60,7 +60,10 @@ def _parse_position_report(msg: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     try:
-        timestamp = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").replace(
+        # aisstream.io format: "2024-04-02 10:15:30.123 +0000 UTC"
+        # Strip optional milliseconds and timezone suffix before parsing.
+        ts = time_str.split(" +")[0].split(".")[0]  # → "2024-04-02 10:15:30"
+        timestamp = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(
             tzinfo=timezone.utc
         )
     except ValueError:
