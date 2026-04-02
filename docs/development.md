@@ -17,8 +17,8 @@ scripts/        Operator-facing CLI tools (run_pipeline.py)
 src/
   ingest/       Data ingestion scripts (AIS, sanctions, registry, trade flow)
   features/     Feature engineering (Polars + Neo4j)
-  score/        Scoring engine (HDBSCAN, Isolation Forest, SHAP, composite)
-  viz/          Streamlit dashboard
+  score/        Scoring engine (HDBSCAN, Isolation Forest, SHAP, composite, causal DiD)
+  api/          FastAPI + HTMX dashboard (src/api/main.py → http://localhost:8000)
 data/
   raw/          Downloaded raw data (gitignored)
   processed/    DuckDB files, Parquet outputs, Neo4j database
@@ -61,7 +61,8 @@ uv run python src/features/ownership_graph.py  # Neo4j BFS graph features
 uv run python src/features/trade_mismatch.py   # trade flow mismatch features
 uv run python src/score/mpol_baseline.py       # HDBSCAN baseline
 uv run python src/score/anomaly.py             # Isolation Forest scoring
-uv run python src/score/composite.py           # composite score + SHAP
+uv run python src/score/causal_sanction.py     # C3: DiD causal model → calibrated w_graph
+uv run python src/score/composite.py           # composite score + SHAP (pass --w-graph from above)
 uv run python src/score/watchlist.py           # output candidate_watchlist.parquet
 ```
 

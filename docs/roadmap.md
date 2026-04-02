@@ -163,14 +163,14 @@ Several parameters currently require direct code edits when deploying to non-def
 - `--region` + `--non-interactive` flags for CI/scripted use
 - No new dependencies
 
-### C3 · Causal Sanction-Response Model
+### C3 · Causal Sanction-Response Model *(Done — [#21](https://github.com/edgesentry/arktrace/issues/21))*
 
 Quantify the causal link between sanction events and observable AIS behaviour:
 
-- **Instrument:** sanction announcement date × affected flag state / entity
-- **Outcome:** AIS gap frequency in the area of interest for vessels connected to that entity (within 2 hops in Neo4j)
-- **Method:** DoWhy `LinearDML` or difference-in-differences with vessel-type fixed effects
-- **Output:** Per-sanction-regime estimated effect size and confidence interval; feeds into the `graph_risk_score` weight calibration
+- **Instrument:** sanction announcement date × affected flag state / entity (`OFAC_Iran`, `OFAC_Russia`, `UN_DPRK`)
+- **Outcome:** AIS gap frequency for vessels connected within 2 hops in Neo4j in the 30-day post-announcement window
+- **Method:** Difference-in-Differences (DiD) with vessel-type and route-corridor fixed effects; OLS with HC3 heteroskedasticity-robust standard errors (`src/score/causal_sanction.py`)
+- **Output:** Per-sanction-regime ATT estimate + 95% CI written to `data/processed/causal_effects.parquet`; `calibrate_graph_weight()` derives a `graph_risk_score` weight in [0.20, 0.65] that is passed as `--w-graph` to `src/score/composite.py`
 
 ---
 
