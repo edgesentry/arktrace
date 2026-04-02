@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import logging
 
 import duckdb
 import polars as pl
@@ -17,6 +18,8 @@ from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
 DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH", "data/processed/candidate_watchlist.parquet")
 _DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
 BRIEF_CONFIDENCE_THRESHOLD = float(os.getenv("BRIEF_CONFIDENCE_THRESHOLD", "0.7"))
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -128,7 +131,12 @@ def _write_cached_brief(mmsi: str, version: str, brief: str, db_path: str | None
         )
         con.close()
     except Exception:
-        pass
+        logger.exception(
+            "Failed to write cached brief to DuckDB (mmsi=%s, version=%s, db_path=%s)",
+            mmsi,
+            version,
+            db_path,
+        )
 
 
 async def _generate_brief_tokens(vessel: dict) -> list[str]:
