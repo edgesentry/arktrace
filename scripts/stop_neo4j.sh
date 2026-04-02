@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop the Neo4j Community container for mpol-analysis.
+# Stop the Neo4j Community container for arktrace.
 
 set -euo pipefail
 

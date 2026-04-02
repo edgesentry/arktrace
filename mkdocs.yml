@@ -1,8 +1,8 @@
-site_name: mpol-analysis
+site_name: arktrace
 site_description: Maritime Pattern of Life analysis pipeline for shadow fleet candidate screening.
-site_url: https://edgesentry.github.io/mpol-analysis/
-repo_url: https://github.com/edgesentry/mpol-analysis
-repo_name: edgesentry/mpol-analysis
+site_url: https://edgesentry.github.io/arktrace/
+repo_url: https://github.com/edgesentry/arktrace
+repo_name: edgesentry/arktrace
 edit_uri: edit/main/docs/
 
 docs_dir: docs

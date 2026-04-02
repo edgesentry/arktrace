@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the Neo4j Community container for mpol-analysis.
+# Start the Neo4j Community container for arktrace.
 # Idempotent: restarts if stopped, creates if absent.
 
 set -euo pipefail

@@ -124,7 +124,7 @@
 
 Work on Phase C items has begun in parallel with Phase A/B ahead of the 29 April 2026 Cap Vista submission. Items marked **In Progress** have open GitHub issues.
 
-### C1 · Dashboard Migration: FastAPI + HTMX *(Done — [#15](https://github.com/edgesentry/mpol-analysis/issues/15))*
+### C1 · Dashboard Migration: FastAPI + HTMX *(Done — [#15](https://github.com/edgesentry/arktrace/issues/15))*
 
 Replaced the Phase A Streamlit prototype with a production-grade FastAPI + HTMX dashboard (`src/api/`):
 
@@ -153,7 +153,7 @@ Several parameters currently require direct code edits when deploying to non-def
 - `--bbox` on `src/ingest/marine_cadastre.py` CLI (bbox currently only settable via Python call for non-Singapore regions)
 - GEBCO bathymetric mask (`src/features/bathymetric_mask.py`) — deferred from A3; provides higher-precision STS candidate filtering than the current 5nm-from-port heuristic
 
-### C5 · Interactive Pipeline CLI *(Done — [#24](https://github.com/edgesentry/mpol-analysis/issues/24))*
+### C5 · Interactive Pipeline CLI *(Done — [#24](https://github.com/edgesentry/arktrace/issues/24))*
 
 `scripts/run_pipeline.py` — a single interactive CLI that walks the user through region selection and executes all pipeline steps with region-specific defaults.
 
