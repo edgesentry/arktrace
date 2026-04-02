@@ -141,6 +141,19 @@ def _run(cmd: list[str], env: Optional[dict] = None) -> subprocess.CompletedProc
     return subprocess.run(cmd, env=merged_env, capture_output=True, text=True)
 
 
+def _ais_row_count(db_path: str) -> int:
+    """Return the number of rows in ais_positions for a given DB, or 0 on error."""
+    try:
+        import duckdb
+        con = duckdb.connect(db_path, read_only=True)
+        try:
+            return con.execute("SELECT COUNT(*) FROM ais_positions").fetchone()[0]
+        finally:
+            con.close()
+    except Exception:
+        return 0
+
+
 def _ask_retry_skip(step_name: str) -> str:
     """Ask user to retry or skip after a step failure. Returns 'retry' or 'skip'."""
     while True:
@@ -301,14 +314,21 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int
         "--bbox", str(lat_min), str(lon_min), str(lat_max), str(lon_max),
     ]
     if stream_duration:
-        # ais_stream handles its own deadline internally — no cross-process signalling needed
-        cmd += ["--duration", str(stream_duration)]
-        result = _run(cmd)
-        if result.returncode == 0:
-            _ok()
+        # ais_stream handles its own deadline internally — no cross-process signalling needed.
+        # Run without capturing so the user sees flush progress in real time.
+        # Cap flush_interval at half the duration (max 30s) so at least one flush occurs.
+        flush_interval = min(30, stream_duration // 2) or 10
+        cmd += ["--duration", str(stream_duration), "--flush-interval", str(flush_interval)]
+        ret = subprocess.run(cmd, env=os.environ.copy()).returncode
+        rows = _ais_row_count(p.db_path)
+        if ret == 0:
+            if rows == 0:
+                _fail("stream exited cleanly but 0 rows inserted — check AISSTREAM_API_KEY and bbox")
+                return False
+            _ok(f"{rows} rows in ais_positions")
         else:
-            _fail(f"exit code {result.returncode}")
-        return result.returncode == 0
+            _fail(f"exit code {ret}")
+        return ret == 0
 
     # Interactive: stream indefinitely until Ctrl-C
     try:
@@ -317,12 +337,12 @@ def step_ais_stream(p: RegionPreset, non_interactive: bool, stream_duration: int
     except KeyboardInterrupt:
         proc.send_signal(__import__("signal").SIGINT)
         proc.wait()
-        print(f"      ^C  Ingestion stopped.  {_green('✓')}")
-        return True
 
-    if proc.returncode == 0:
-        _ok()
-        return True
+    if proc.returncode in (0, -2):
+        rows = _ais_row_count(p.db_path)
+        detail = f"{rows} rows in ais_positions" if rows else "0 rows — check AISSTREAM_API_KEY"
+        print(f"      Ingestion stopped.  {_green('✓')}  {_dim(detail)}")
+        return rows > 0 or not non_interactive
 
     _fail(f"exit code {proc.returncode}")
     return _ask_retry_skip("AIS streaming") == "skip"
