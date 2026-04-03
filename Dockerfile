@@ -16,8 +16,9 @@ RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
 
-# Install into an isolated prefix so we can copy it cleanly to the runtime image
-RUN uv sync --no-dev --frozen --prefix /install
+# Export pinned requirements then install into /install so it can be copied cleanly
+RUN uv export --no-dev --frozen -o /tmp/requirements.txt \
+    && pip install --no-cache-dir --prefix /install -r /tmp/requirements.txt
 
 # ── runtime: lean image without build tools ────────────────────────────────────
 FROM python:3.12-slim AS runtime
