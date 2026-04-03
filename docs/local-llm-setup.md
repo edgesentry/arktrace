@@ -35,46 +35,26 @@ Model IDs and full config blocks live in **`.env.example`** — that is the sing
 
 ---
 
-## ⚠️ Docker Access Note
+## Setup
 
-If you are running the **MPOL Dashboard or Pipeline inside Docker**, you cannot use `localhost` in your `.env` file to reach the LLM server. The blocks in `.env.example` already use `host.docker.internal` for this reason.
+1. **Install prerequisites** for your chosen backend:
 
----
+   - **MLX LM** (Apple Silicon only):
+     ```bash
+     uv sync --extra mlx
+     ```
+   - **Ollama** (Intel + Apple Silicon):
+     ```bash
+     brew install ollama
+     ```
 
-## Option A: MLX LM (Recommended for Apple Silicon)
+2. **Configure `.env`** — copy the matching block from `.env.example` and uncomment it. Each block is labeled with the backend, model, and RAM tier.
 
-Optimized for Apple Silicon. MLX LM runs quantized models natively on the Apple Neural Engine. It is the fastest local option on M-series Macs.
-
-1. **Install the dependencies** (requires Python 3.10+):
+3. **Start the server** — the script reads `LLM_PROVIDER` and `LLM_MODEL` directly from `.env`:
    ```bash
-   uv sync --extra mlx
+   ./scripts/start_llm_server.sh
    ```
-
-2. **Start the OpenAI-compatible server** using the model ID from your chosen block in `.env.example`:
-   ```bash
-   uv run mlx_lm.server --model <LLM_MODEL from .env.example> --port 8080
-   ```
-
-3. **Copy the matching `MLX LM` block from `.env.example` into `.env`** and uncomment it.
-
----
-
-## Option B: Ollama (Intel & Apple Silicon)
-
-Supports Metal acceleration on Apple Silicon and CPU on Intel.
-
-1. **Install via Homebrew**:
-   ```bash
-   brew install ollama
-   ```
-
-2. **Pull the model** using the ID from your chosen `Ollama` block in `.env.example`:
-   ```bash
-   ollama pull <LLM_MODEL from .env.example>
-   ollama serve
-   ```
-
-3. **Copy the matching `Ollama` block from `.env.example` into `.env`** and uncomment it.
+   For MLX this starts an OpenAI-compatible server on port 8080. For Ollama it pulls the model (if not already cached) then starts the server on port 11434.
 
 ---
 
