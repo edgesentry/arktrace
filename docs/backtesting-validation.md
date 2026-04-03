@@ -217,6 +217,16 @@ uv run python scripts/build_public_sanctions_demo_sample.py \
 This is useful for fast demos and local smoke checks without full-size ingestion.
 The `data/demo/` folder is intended to be committed to Git as portable demo fixtures.
 
+Bundled dashboard fixture:
+
+- `data/demo/candidate_watchlist_demo.parquet`
+
+To load it into the dashboard input path quickly:
+
+```bash
+uv run python scripts/use_demo_watchlist.py --backup
+```
+
 ## Main-merge Integration Batch (Known-case Check)
 
 Run a medium-scale batch that:

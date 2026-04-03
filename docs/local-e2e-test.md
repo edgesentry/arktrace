@@ -133,6 +133,21 @@ PIPELINE_REGION=gulf docker compose run --rm pipeline \
 
 See `docs/regional-playbooks.md` for per-region configuration details.
 
+### Optional: Use bundled demo watchlist (fastest dashboard check)
+
+If you want a deterministic demo without running full ingestion, copy the bundled fixture:
+
+```bash
+uv run python scripts/use_demo_watchlist.py --backup
+```
+
+This copies:
+
+- `data/demo/candidate_watchlist_demo.parquet`
+  -> `data/processed/candidate_watchlist.parquet`
+
+Then open the dashboard and verify map/table rendering immediately.
+
 A successful run ends with:
 
 ```
