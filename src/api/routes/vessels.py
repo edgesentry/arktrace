@@ -20,7 +20,10 @@ router = APIRouter()
 
 
 def _load_watchlist() -> pl.DataFrame:
-    return read_parquet_uri(DEFAULT_WATCHLIST_PATH) or pl.DataFrame()
+    df = read_parquet_uri(DEFAULT_WATCHLIST_PATH)
+    if df is None:
+        return pl.DataFrame()
+    return df
 
 
 def _load_metrics() -> dict | None:

@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from sklearn.metrics import roc_auc_score
 
 from src.score.watchlist import DEFAULT_DB_PATH, DEFAULT_OUTPUT_PATH as DEFAULT_WATCHLIST_PATH, build_candidate_watchlist
+from src.storage.config import read_parquet as read_parquet_uri
 
 load_dotenv()
 
@@ -98,9 +99,8 @@ def validate_watchlist(
     watchlist_path: str = DEFAULT_WATCHLIST_PATH,
     metrics_path: str = DEFAULT_METRICS_PATH,
 ) -> dict[str, float | int | None]:
-    if Path(watchlist_path).exists():
-        watchlist_df = pl.read_parquet(watchlist_path)
-    else:
+    watchlist_df = read_parquet_uri(watchlist_path)
+    if watchlist_df is None:
         watchlist_df = build_candidate_watchlist(db_path)
 
     labeled = label_watchlist_against_ofac(watchlist_df, db_path)

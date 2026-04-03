@@ -143,7 +143,10 @@ def _write_cache(key: str, mmsi: str | None, q_hash: str, version: str, response
 
 
 def _load_watchlist() -> pl.DataFrame:
-    return read_parquet_uri(DEFAULT_WATCHLIST_PATH) or pl.DataFrame()
+    df = read_parquet_uri(DEFAULT_WATCHLIST_PATH)
+    if df is None:
+        return pl.DataFrame()
+    return df
 
 
 def _fleet_context(df: pl.DataFrame) -> str:
