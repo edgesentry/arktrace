@@ -263,10 +263,6 @@ def _query_graph_ownership(mmsi: str) -> str:
         return f"  Ownership graph unavailable ({exc})."
 
 
-# Keep the old name as an alias so existing patches in tests still work during transition.
-_query_neo4j_ownership = _query_graph_ownership
-
-
 def _build_system(vessel: dict | None, df: pl.DataFrame) -> str:
     fleet = _fleet_context(df)
 
