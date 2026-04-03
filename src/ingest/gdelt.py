@@ -22,7 +22,9 @@ from pathlib import Path
 import httpx
 import polars as pl
 
-DEFAULT_LANCE_PATH = os.getenv("GDELT_LANCE_PATH", "data/processed/gdelt.lance")
+from src.storage.config import is_s3, lance_db_uri, lance_storage_options
+
+DEFAULT_LANCE_PATH = lance_db_uri()
 GDELT_BASE_URL = "http://data.gdeltproject.org/events"
 
 # CAMEO root codes to retain — conflict, coercion, sanctions, force posture
@@ -206,8 +208,12 @@ def ingest_gdelt_events(
     if not records:
         return 0
 
-    os.makedirs(os.path.dirname(lance_path) if os.path.dirname(lance_path) else ".", exist_ok=True)
-    db = lancedb.connect(lance_path)
+    if not is_s3():
+        parent = os.path.dirname(lance_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+    storage_opts = lance_storage_options()
+    db = lancedb.connect(lance_path, storage_options=storage_opts) if storage_opts else lancedb.connect(lance_path)
 
     if "events" in db.table_names():
         table = db.open_table("events")
@@ -236,10 +242,11 @@ def query_gdelt_context(
     """
     import lancedb
 
-    if not os.path.exists(lance_path):
+    storage_opts = lance_storage_options()
+    try:
+        db = lancedb.connect(lance_path, storage_options=storage_opts) if storage_opts else lancedb.connect(lance_path)
+    except Exception:
         return []
-
-    db = lancedb.connect(lance_path)
     if "events" not in db.table_names():
         return []
 

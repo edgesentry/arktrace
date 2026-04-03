@@ -9,10 +9,12 @@ import polars as pl
 from dotenv import load_dotenv
 
 from src.score.composite import DEFAULT_DB_PATH, compute_composite_scores
+from src.storage.config import output_uri
+from src.storage.config import write_parquet as write_parquet_uri
 
 load_dotenv()
 
-DEFAULT_OUTPUT_PATH = os.getenv("WATCHLIST_OUTPUT_PATH", "data/processed/candidate_watchlist.parquet")
+DEFAULT_OUTPUT_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri("candidate_watchlist.parquet")
 
 
 def build_candidate_watchlist(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
@@ -20,8 +22,7 @@ def build_candidate_watchlist(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
 
 
 def write_candidate_watchlist(df: pl.DataFrame, output_path: str = DEFAULT_OUTPUT_PATH) -> None:
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    df.write_parquet(output_path)
+    write_parquet_uri(df, output_path)
 
 
 def main() -> None:

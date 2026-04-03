@@ -54,11 +54,13 @@ from dotenv import load_dotenv
 
 from src.score.anomaly import ANOMALY_FEATURE_COLUMNS, load_feature_frame, score_anomalies
 from src.score.mpol_baseline import build_mpol_baseline
+from src.storage.config import output_uri
+from src.storage.config import write_parquet as write_parquet_uri
 
 load_dotenv()
 
 DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
-DEFAULT_OUTPUT_PATH = os.getenv("COMPOSITE_SCORES_PATH", "data/processed/composite_scores.parquet")
+DEFAULT_OUTPUT_PATH = os.getenv("COMPOSITE_SCORES_PATH") or output_uri("composite_scores.parquet")
 
 FEATURE_VALUE_COLUMNS = [
     "ais_gap_count_30d",
@@ -365,8 +367,7 @@ def compute_composite_scores(
 
 
 def write_composite_scores(df: pl.DataFrame, output_path: str = DEFAULT_OUTPUT_PATH) -> None:
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    df.write_parquet(output_path)
+    write_parquet_uri(df, output_path)
 
 
 def main() -> None:

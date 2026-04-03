@@ -15,8 +15,10 @@ from pydantic import BaseModel
 
 from src.api.llm import get_llm_client
 from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
+from src.storage.config import output_uri
+from src.storage.config import read_parquet as read_parquet_uri
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH", "data/processed/candidate_watchlist.parquet")
+DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri("candidate_watchlist.parquet")
 _DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
 BRIEF_CONFIDENCE_THRESHOLD = float(os.getenv("BRIEF_CONFIDENCE_THRESHOLD", "0.7"))
 
@@ -49,10 +51,10 @@ _USER_TEMPLATE = (
 
 
 def _load_vessel(mmsi: str) -> dict | None:
-    path = DEFAULT_WATCHLIST_PATH
-    if not os.path.exists(path):
+    df = read_parquet_uri(DEFAULT_WATCHLIST_PATH)
+    if df is None:
         return None
-    df = pl.read_parquet(path).filter(pl.col("mmsi") == mmsi)
+    df = df.filter(pl.col("mmsi") == mmsi)
     if df.is_empty():
         return None
     return df.row(0, named=True)

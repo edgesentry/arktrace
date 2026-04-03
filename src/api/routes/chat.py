@@ -27,8 +27,10 @@ from pydantic import BaseModel
 
 from src.api.llm import get_llm_client
 from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
+from src.storage.config import output_uri
+from src.storage.config import read_parquet as read_parquet_uri
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH", "data/processed/candidate_watchlist.parquet")
+DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri("candidate_watchlist.parquet")
 _DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
 
 logger = logging.getLogger(__name__)
@@ -141,9 +143,7 @@ def _write_cache(key: str, mmsi: str | None, q_hash: str, version: str, response
 
 
 def _load_watchlist() -> pl.DataFrame:
-    if not os.path.exists(DEFAULT_WATCHLIST_PATH):
-        return pl.DataFrame()
-    return pl.read_parquet(DEFAULT_WATCHLIST_PATH)
+    return read_parquet_uri(DEFAULT_WATCHLIST_PATH) or pl.DataFrame()
 
 
 def _fleet_context(df: pl.DataFrame) -> str:
