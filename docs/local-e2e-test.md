@@ -133,6 +133,21 @@ PIPELINE_REGION=gulf docker compose run --rm pipeline \
 
 See `docs/regional-playbooks.md` for per-region configuration details.
 
+### Optional: Use bundled demo watchlist (fastest dashboard check)
+
+If you want a deterministic demo without running full ingestion, copy the bundled fixture:
+
+```bash
+uv run python scripts/use_demo_watchlist.py --backup
+```
+
+This copies:
+
+- `data/demo/candidate_watchlist_demo.parquet`
+  -> `data/processed/candidate_watchlist.parquet`
+
+Then open the dashboard and verify map/table rendering immediately.
+
 A successful run ends with:
 
 ```
@@ -187,6 +202,50 @@ uv run pytest tests/test_causal_effects_output.py -v
 ```
 
 The test skips automatically if the pipeline has not been run yet.
+
+---
+
+## Step 4 — Run historical backtesting validation
+
+Use historical windows to validate ranking quality against public evidence labels.
+
+1. Create input files:
+
+```bash
+cp config/evaluation_manifest.sample.json config/evaluation_manifest.local.json
+cp config/eval_labels.template.csv data/processed/eval_labels_2025q1.csv
+```
+
+2. Edit `config/evaluation_manifest.local.json` to point to your real watchlist snapshot and labels CSV.
+
+3. Fill `data/processed/eval_labels_2025q1.csv` with evidence-backed labels (`positive`/`negative`) and `label_confidence`.
+
+4. Run backtest:
+
+```bash
+uv run python -m src.score.backtest \
+  --manifest config/evaluation_manifest.local.json \
+  --output data/processed/backtest_report.json \
+  --review-capacities 25,50,100
+```
+
+5. Review report:
+
+```bash
+cat data/processed/backtest_report.json
+```
+
+Key fields to check:
+
+- `windows[].metrics.precision_at_50`
+- `windows[].metrics.precision_at_100`
+- `windows[].metrics.recall_at_200`
+- `windows[].metrics.auroc`
+- `windows[].metrics.pr_auc`
+- `windows[].recommended_threshold`
+- `windows[].ops_thresholds[]`
+
+See `docs/backtesting-validation.md` for label policy and automation boundaries.
 
 ---
 
