@@ -52,3 +52,7 @@ This project was developed in response to **Cap Vista Accelerator Solicitation 5
 - Anomaly detection based solely on AIS + satellite fusion
 - Off-the-shelf vessel behavior profiling or MMSI risk scoring APIs
 - Geofencing
+
+## Workflow Governance
+
+- [Human-in-the-Loop Triage Governance](triage-governance.md): tier taxonomy, evidence policy, escalation lifecycle, and KPI specification used for ranking-to-investigation decisions.
