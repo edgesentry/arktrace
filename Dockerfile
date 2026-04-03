@@ -1,8 +1,8 @@
-FROM python:3.12-slim
+# ── builder: compiles Rust/maturin packages (lance-graph) ─────────────────────
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# Build tools required for lance-graph (Rust/maturin) and other native extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -12,14 +12,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install uv
 RUN pip install --no-cache-dir uv
 
-# Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install production dependencies (no dev extras)
-RUN uv sync --no-dev --frozen
+# Install into an isolated prefix so we can copy it cleanly to the runtime image
+RUN uv sync --no-dev --frozen --prefix /install
+
+# ── runtime: lean image without build tools ────────────────────────────────────
+FROM python:3.12-slim AS runtime
+
+WORKDIR /app
+
+# Copy the pre-built site-packages and scripts from the builder
+COPY --from=builder /install /usr/local
 
 # Copy source
 COPY src/ ./src/
@@ -31,4 +37,4 @@ ENV VALIDATION_METRICS_PATH=data/processed/validation_metrics.json
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
