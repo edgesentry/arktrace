@@ -19,6 +19,51 @@ Templates:
 - `config/evaluation_manifest.sample.json`
 - `config/eval_labels.template.csv`
 
+## Automation Boundary
+
+This section clarifies what can be automated end-to-end and what still requires human judgment.
+
+### Can be automated
+
+1. Data extraction and file generation
+- Generate draft labels CSV rows from sanctions tables (MMSI/IMO/name/list source).
+- Generate manifest windows with watchlist and label file paths.
+- Validate required columns and file shape before running backtest.
+
+2. Backtest execution and metric reporting
+- Run historical window evaluation from manifest.
+- Compute ranking and classification metrics (Precision@K, Recall@K, AUROC, PR-AUC, calibration error).
+- Generate threshold suggestions for fixed review capacities.
+- Export JSON reports for CI artifacts and dashboards.
+
+3. Regression monitoring
+- Run repeatable checks in CI on curated historical windows.
+- Alert when key metrics drift below agreed thresholds.
+
+### Cannot be fully automated
+
+1. Ground-truth certainty
+- Public data is incomplete and delayed; many true shadow-fleet outcomes are never formally published.
+- Therefore, a fully complete positive/negative truth set cannot be auto-derived.
+
+2. High-confidence negative labeling
+- "No public evidence" is not the same as "truly negative."
+- Negative labels with high confidence require analyst review and policy criteria.
+
+3. Evidence quality and temporal validity
+- Source credibility, evidence freshness, and timeline consistency require human validation.
+- Leakage checks (ensuring evidence was known within the historical window) require governance decisions.
+
+4. Operational decisioning
+- The model provides ranked candidates and scores; officers decide investigation priority.
+- Final status assignment (confirmed/cleared/inconclusive) is a human-in-the-loop decision.
+
+### Recommended split of responsibilities
+
+- Automation handles: candidate generation, metric computation, report generation, regression checks.
+- Human review handles: evidence adjudication, label confidence assignment, final investigative decisions.
+- Feedback loop combines both: human outcomes are fed back into periodic model/threshold updates.
+
 ## Label Policy
 
 - `label`: `positive` or `negative`
