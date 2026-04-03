@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # ── builder: compiles Rust/maturin packages (lance-graph) ─────────────────────
 FROM python:3.12-slim AS builder
 
@@ -18,23 +20,26 @@ RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
 
-# Export pinned requirements then install into /install so it can be copied cleanly
-RUN uv export --no-dev --frozen --no-emit-project -o /tmp/requirements.txt \
-    && pip install --no-cache-dir --prefix /install -r /tmp/requirements.txt
+# Cache mounts keep cargo registry and uv wheel cache across builds,
+# so Rust only recompiles when lance-graph itself changes.
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-dev --frozen
 
 # ── runtime: lean image without build tools ────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
-# Copy the pre-built site-packages and scripts from the builder
-COPY --from=builder /install /usr/local
+# Copy the pre-built virtualenv from the builder
+COPY --from=builder /app/.venv /app/.venv
 
-# Copy source
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY data/ ./data/
 
+ENV PATH="/app/.venv/bin:${PATH}"
 ENV WATCHLIST_OUTPUT_PATH=data/processed/candidate_watchlist.parquet
 ENV VALIDATION_METRICS_PATH=data/processed/validation_metrics.json
 
