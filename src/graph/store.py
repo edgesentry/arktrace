@@ -104,8 +104,6 @@ REL_SCHEMAS: dict[str, pa.Schema] = {
 
 ALL_SCHEMAS: dict[str, pa.Schema] = {**NODE_SCHEMAS, **REL_SCHEMAS}
 
-_TABLE_NAMES = list(ALL_SCHEMAS.keys())
-
 
 # ---------------------------------------------------------------------------
 # Path helpers
