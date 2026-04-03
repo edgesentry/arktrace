@@ -97,6 +97,21 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
             )
         """)
         con.execute("""
+            CREATE TABLE IF NOT EXISTS vessel_reviews (
+                mmsi                VARCHAR NOT NULL,
+                review_tier         VARCHAR NOT NULL,
+                handoff_state       VARCHAR NOT NULL DEFAULT 'queued_review',
+                rationale           TEXT,
+                evidence_refs_json  TEXT,
+                reviewed_by         VARCHAR,
+                reviewed_at         TIMESTAMPTZ DEFAULT now()
+            )
+        """)
+        con.execute("""
+            CREATE INDEX IF NOT EXISTS idx_vessel_reviews_mmsi_time
+            ON vessel_reviews (mmsi, reviewed_at)
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS vessel_features (
                 mmsi                       VARCHAR PRIMARY KEY,
                 ais_gap_count_30d          INTEGER,
