@@ -10,17 +10,20 @@ import polars as pl
 from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH", "data/processed/candidate_watchlist.parquet")
+from src.storage.config import output_uri
+from src.storage.config import read_parquet as read_parquet_uri
+
+DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri("candidate_watchlist.parquet")
 DEFAULT_VALIDATION_PATH = os.getenv("VALIDATION_METRICS_PATH", "data/processed/validation_metrics.json")
 
 router = APIRouter()
 
 
 def _load_watchlist() -> pl.DataFrame:
-    path = DEFAULT_WATCHLIST_PATH
-    if not os.path.exists(path):
+    df = read_parquet_uri(DEFAULT_WATCHLIST_PATH)
+    if df is None:
         return pl.DataFrame()
-    return pl.read_parquet(path)
+    return df
 
 
 def _load_metrics() -> dict | None:

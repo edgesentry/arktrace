@@ -55,12 +55,13 @@ import numpy as np
 import polars as pl
 from dotenv import load_dotenv
 
+from src.storage.config import output_uri
+from src.storage.config import write_parquet as write_parquet_uri
+
 load_dotenv()
 
 DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
-DEFAULT_OUTPUT_PATH = os.getenv(
-    "CAUSAL_EFFECTS_PATH", "data/processed/causal_effects.parquet"
-)
+DEFAULT_OUTPUT_PATH = os.getenv("CAUSAL_EFFECTS_PATH") or output_uri("causal_effects.parquet")
 
 # ---------------------------------------------------------------------------
 # Sanction regime definitions
@@ -657,8 +658,7 @@ def effects_to_dataframe(effects: list[CausalEffect]) -> pl.DataFrame:
 
 def write_effects(df: pl.DataFrame, output_path: str = DEFAULT_OUTPUT_PATH) -> None:
     """Persist the effects DataFrame to Parquet."""
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    df.write_parquet(output_path)
+    write_parquet_uri(df, output_path)
 
 
 # ---------------------------------------------------------------------------

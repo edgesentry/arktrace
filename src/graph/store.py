@@ -28,6 +28,8 @@ from pathlib import Path
 import lance
 import pyarrow as pa
 
+from src.storage.config import graph_uri, is_s3, lance_storage_options
+
 
 # ---------------------------------------------------------------------------
 # Schema definitions
@@ -110,13 +112,15 @@ ALL_SCHEMAS: dict[str, pa.Schema] = {**NODE_SCHEMAS, **REL_SCHEMAS}
 # ---------------------------------------------------------------------------
 
 def graph_dir(db_path: str) -> str:
-    """Return the Lance graph directory for a given DuckDB path."""
-    p = Path(db_path)
-    return str(p.parent / (p.stem + "_graph"))
+    """Return the Lance graph root URI (S3) or local directory path."""
+    return graph_uri(db_path)
 
 
 def _dataset_path(db_path: str, name: str) -> str:
-    return os.path.join(graph_dir(db_path), f"{name}.lance")
+    root = graph_dir(db_path)
+    if root.startswith("s3://"):
+        return f"{root.rstrip('/')}/{name}.lance"
+    return os.path.join(root, f"{name}.lance")
 
 
 # ---------------------------------------------------------------------------
@@ -126,10 +130,15 @@ def _dataset_path(db_path: str, name: str) -> str:
 def write_tables(db_path: str, tables: dict[str, pa.Table]) -> None:
     """Write (overwrite) a set of named tables to the Lance graph directory."""
     gdir = graph_dir(db_path)
-    os.makedirs(gdir, exist_ok=True)
+    if not is_s3():
+        os.makedirs(gdir, exist_ok=True)
+    storage_opts = lance_storage_options()
     for name, table in tables.items():
         path = _dataset_path(db_path, name)
-        lance.write_dataset(table, path, mode="overwrite")
+        if storage_opts:
+            lance.write_dataset(table, path, mode="overwrite", storage_options=storage_opts)
+        else:
+            lance.write_dataset(table, path, mode="overwrite")
 
 
 def load_tables(db_path: str) -> dict[str, pa.Table]:
@@ -137,11 +146,18 @@ def load_tables(db_path: str) -> dict[str, pa.Table]:
 
     Missing datasets are returned as empty tables with the correct schema.
     """
+    storage_opts = lance_storage_options()
     tables: dict[str, pa.Table] = {}
     for name, schema in ALL_SCHEMAS.items():
         path = _dataset_path(db_path, name)
-        if os.path.exists(path):
-            tables[name] = lance.dataset(path).to_table()
+        if is_s3():
+            try:
+                tables[name] = lance.dataset(path, storage_options=storage_opts).to_table()
+            except Exception:
+                tables[name] = schema.empty_table()
         else:
-            tables[name] = schema.empty_table()
+            if os.path.exists(path):
+                tables[name] = lance.dataset(path).to_table()
+            else:
+                tables[name] = schema.empty_table()
     return tables
