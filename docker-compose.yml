@@ -1,6 +1,6 @@
 services:
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: mpol-minio
     ports:
       - "9000:9000"   # S3 API
@@ -38,7 +38,6 @@ services:
     env_file:
       - .env
     environment:
-      WATCHLIST_OUTPUT_PATH: ""   # cleared so output_uri() resolves from S3_BUCKET or local default
       VALIDATION_METRICS_PATH: data/processed/validation_metrics.json
       ALERT_CONFIDENCE_THRESHOLD: "0.75"
       ALERT_POLL_INTERVAL: "60"
@@ -60,7 +59,6 @@ services:
     env_file:
       - .env
     environment:
-      WATCHLIST_OUTPUT_PATH: ""   # cleared so output_uri() resolves from S3_BUCKET or local default
       # S3-compatible object storage
       S3_BUCKET: ${S3_BUCKET:-arktrace}
       S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
