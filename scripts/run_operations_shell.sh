@@ -271,6 +271,56 @@ print(f"Artifact: {path}")
 PY
 }
 
+run_prepare_sanctions_db() {
+  echo
+  echo "[7] Prepare Public Sanctions DB"
+
+  local db_path
+  db_path="$(prompt "DuckDB output path" "data/processed/public_eval.duckdb")"
+
+  local force_download_flag=()
+  if prompt_yes_no "Force re-download raw data" "false"; then
+    force_download_flag=(--force-download)
+  fi
+
+  local force_reload_flag=()
+  if prompt_yes_no "Force re-reload into DB (even if already loaded)" "false"; then
+    force_reload_flag=(--force-reload)
+  fi
+
+  if ! run_cmd uv run python scripts/prepare_public_sanctions_db.py \
+      --db "$db_path" "${force_download_flag[@]}" "${force_reload_flag[@]}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+  echo "Artifact: $PROJECT_ROOT/$db_path"
+}
+
+run_build_sanctions_demo() {
+  echo
+  echo "[8] Build Sanctions Demo Sample"
+
+  local source_db
+  source_db="$(prompt "Source DuckDB path" "data/processed/public_eval.duckdb")"
+  local demo_db
+  demo_db="$(prompt "Demo DuckDB output path" "data/demo/public_eval_demo.duckdb")"
+  local max_rows
+  max_rows="$(prompt "Max rows per entity type" "300")"
+
+  if ! run_cmd uv run python scripts/build_public_sanctions_demo_sample.py \
+      --source-db "$source_db" \
+      --demo-db "$demo_db" \
+      --max-rows "$max_rows"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+  echo "Artifact: $PROJECT_ROOT/$demo_db"
+}
+
 run_seed_dev_data() {
   echo
   echo "[6] Seed Dev Data"
@@ -302,6 +352,8 @@ main_menu() {
     echo "4) Demo/Smoke                  — load demo watchlist for fast UI and dashboard testing"
     echo "5) Delayed-Label Intelligence  — causal rewind + label propagation from confirmed labels"
     echo "6) Seed Dev Data               — seed watchlist parquet + DuckDB for local testing and backtracking evaluation"
+    echo "7) Prepare Sanctions DB        — download and persist OpenSanctions data into public_eval DuckDB"
+    echo "8) Build Sanctions Demo Sample — create small demo DuckDB from prepared sanctions data for UI testing"
     echo "q) Quit"
 
     local choice
@@ -315,6 +367,8 @@ main_menu() {
       4) run_demo_smoke ;;
       5) run_backtracking ;;
       6) run_seed_dev_data ;;
+      7) run_prepare_sanctions_db ;;
+      8) run_build_sanctions_demo ;;
       q|quit|exit)
         echo "Bye"
         return
