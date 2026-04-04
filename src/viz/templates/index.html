@@ -521,6 +521,7 @@
             <th>Flag</th>
             <th>Score</th>
             <th>Signals</th>
+            <th title="Unknown-unknown causal candidate">U-U</th>
             <th>Tier</th>
             <th>Handoff</th>
             <th>Review</th>
@@ -688,11 +689,13 @@ map.on('load', () => {
   loadVesselTypes();
   startAlertStream();
   setTimeout(refreshReviewBadges, 150);
+  setTimeout(refreshCausalBadges, 200);
 });
 
 document.body.addEventListener('htmx:afterSwap', (evt) => {
   if (evt.target && evt.target.id === 'watchlist-tbody') {
     refreshReviewBadges();
+    refreshCausalBadges();
   }
 });
 
@@ -1088,6 +1091,27 @@ async function saveReviewDecision() {
   } catch (err) {
     document.getElementById('review-status').textContent = `Save failed: ${err}`;
   }
+}
+
+// ── Unknown-unknown causal column ─────────────────────────────────────────
+function refreshCausalBadges() {
+  fetch('/api/vessels/causal-candidates')
+    .then(r => r.json())
+    .then(data => {
+      const candidateMap = new Map(
+        (data.candidates || []).map(c => [c.mmsi, c.causal_score])
+      );
+      document.querySelectorAll('td.causal-col').forEach(td => {
+        const mmsi = td.dataset.mmsi;
+        if (candidateMap.has(mmsi)) {
+          const score = candidateMap.get(mmsi).toFixed(2);
+          td.innerHTML = `<span class="causal-badge" title="Unknown-unknown candidate — score ${score}">&#9888; ${score}</span>`;
+        } else {
+          td.innerHTML = '';
+        }
+      });
+    })
+    .catch(() => {});
 }
 
 // ── SSE alert stream ───────────────────────────────────────────────────────

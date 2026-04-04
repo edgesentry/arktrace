@@ -116,6 +116,7 @@ def watchlist_top(
             f"<td>{row['flag']}</td>"
             f"<td><span class='badge {badge_class}'>{conf:.2f}</span></td>"
             f"<td class='signals'>{signals_text}</td>"
+            f"<td class='causal-col' data-mmsi='{row['mmsi']}'></td>"
             f"<td class='review-tier' data-mmsi='{row['mmsi']}'>—</td>"
             f"<td class='review-handoff' data-mmsi='{row['mmsi']}'>—</td>"
             f"<td><button class='review-btn' onclick=\"event.stopPropagation(); openReviewPanel('{row['mmsi']}', '{safe_name_attr}');\">Review</button></td>"
@@ -135,6 +136,26 @@ def metrics() -> JSONResponse:
         "precision_at_50": m.get("precision_at_50"),
         "recall_at_200": m.get("recall_at_200"),
         "auroc": m.get("auroc"),
+    })
+
+
+@router.get("/api/vessels/causal-candidates")
+def causal_candidates() -> JSONResponse:
+    """Return the set of unknown-unknown candidate MMSIs and their scores.
+
+    Intended for the watchlist table to badge rows without per-row API calls.
+    Response: { "candidates": [{ "mmsi": "...", "causal_score": 0.0 }, ...] }
+    """
+    db_path = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
+    try:
+        candidates = score_unknown_unknowns(db_path=db_path, min_signals=1)
+    except Exception:
+        return JSONResponse({"candidates": []})
+    return JSONResponse({
+        "candidates": [
+            {"mmsi": c.mmsi, "causal_score": c.causal_score}
+            for c in candidates
+        ]
     })
 
 
