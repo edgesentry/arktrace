@@ -310,25 +310,19 @@
       line-height: 1;
     }
     .maplibregl-popup-close-button:hover { color: #e2e8f0; }
-    .brief-btn {
-      margin-top: 0.5rem;
+    .review-btn {
+      margin-top: 0;
       padding: 0.25rem 0.6rem;
       background: #3b82f6;
       color: white;
       border: none;
       border-radius: 3px;
       cursor: pointer;
-      font-size: 0.72rem;
-      font-family: inherit;
-    }
-    .brief-btn:hover { background: #2563eb; }
-
-    .review-btn {
-      margin-top: 0;
-      padding: 0.2rem 0.45rem;
       font-size: 0.68rem;
       white-space: nowrap;
+      font-family: inherit;
     }
+    .review-btn:hover { background: #2563eb; }
 
     .review-pill {
       display: inline-block;
@@ -452,7 +446,6 @@
 <header>
   <h1>&#9760; Shadow Fleet Watchlist</h1>
   <span style="color:#718096;font-size:0.75rem;">MPOL &middot; Maritime Pattern of Life</span>
-  <button class="apply-btn" style="width:auto;padding:0.35rem 0.9rem;font-size:0.8rem;margin-left:auto;" onclick="openFleetChat()">Fleet Chat</button>
 </header>
 
 <!-- KPI bar -->
@@ -494,7 +487,6 @@
       </div>
 
       <button class="apply-btn" onclick="applyFilters()">Apply</button>
-      <button class="apply-btn" style="background:#0f766e;" onclick="startQuickReview()">Quick Review Top N</button>
     </div>
 
     <!-- HTMX-powered ranked table -->
@@ -532,7 +524,6 @@
   <div class="review-header">
     <span class="review-header-label" id="review-vessel-label">Review Decision</span>
     <div class="review-header-actions">
-      <button class="apply-btn" style="width:auto;padding:0.3rem 0.7rem;font-size:0.75rem;background:#0f766e;" onclick="openNextReviewCandidate()">Next Candidate</button>
       <button class="chat-close-btn" onclick="closeReviewPanel()" title="Close">&#x2715;</button>
     </div>
   </div>
@@ -592,22 +583,15 @@
       <div class="review-status" id="review-status">Select a vessel to review.</div>
     </div>
     <div class="review-summary">
+      <h3>Selected Vessel</h3>
+      <div id="review-vessel-details" style="font-size:0.76rem;line-height:1.45;color:#cbd5e1;margin-bottom:0.6rem;">Select a vessel from the list.</div>
       <h3>Latest Review Summary</h3>
-      <div id="review-summary-content" style="font-size:0.76rem;line-height:1.45;color:#cbd5e1;">No review loaded.</div>
+      <div id="review-summary-content" style="font-size:0.76rem;line-height:1.45;color:#cbd5e1;margin-bottom:0.6rem;">No review loaded.</div>
+      <h3>Past Feedback Records</h3>
+      <div id="review-history-content" style="font-size:0.74rem;line-height:1.4;color:#cbd5e1;margin-bottom:0.6rem;">No feedback history loaded.</div>
+      <h3>LLM Explanation</h3>
+      <div id="review-brief-content" style="font-size:0.74rem;line-height:1.45;color:#cbd5e1;">No explanation loaded.</div>
     </div>
-  </div>
-</div>
-
-<!-- Chat panel (bottom) -->
-<div id="chat-panel">
-  <div class="chat-header">
-    <span class="chat-header-label" id="chat-vessel-label">Analyst Brief</span>
-    <button class="chat-close-btn" onclick="closeChatPanel()" title="Close">&#x2715;</button>
-  </div>
-  <div class="chat-messages" id="chat-messages"></div>
-  <div class="chat-input-row">
-    <input type="text" id="chat-input" placeholder="Ask a follow-up question…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}" />
-    <button id="chat-send-btn" onclick="sendChatMessage()">Send</button>
   </div>
 </div>
 
@@ -669,8 +653,7 @@ map.on('load', () => {
         `MMSI: ${mmsi}<br/>` +
         `Flag: ${p.flag} &nbsp;|&nbsp; Type: ${p.vessel_type}<br/>` +
         `Confidence: <strong>${parseFloat(p.confidence).toFixed(2)}</strong><br/>` +
-        `Last seen: ${p.last_seen}<br/>` +
-        `<button class="brief-btn" onclick="openAnalystBrief('${mmsi}','${vesselName.replace(/'/g,"\\'")}')">Analyst Brief</button>`
+        `Last seen: ${p.last_seen}<br/>`
       )
       .addTo(map);
   });
@@ -703,9 +686,20 @@ document.getElementById('watchlist-tbody').addEventListener('click', (e) => {
 
   const lat = parseFloat(row.dataset.lat);
   const lon = parseFloat(row.dataset.lon);
+  const vesselMeta = {
+    mmsi: row.dataset.mmsi || '',
+    name: row.dataset.name || row.dataset.mmsi || '',
+    vesselType: row.dataset.type || '—',
+    flag: row.dataset.flag || '—',
+    confidence: row.dataset.confidence || '',
+    lastSeen: row.dataset.lastSeen || '—',
+    signals: row.dataset.signals || '—',
+  };
   if (isNaN(lat) || isNaN(lon)) return;
 
   map.flyTo({ center: [lon, lat], zoom: 8, duration: 1000 });
+  openReviewPanel(vesselMeta.mmsi, vesselMeta.name, vesselMeta);
+  loadBriefForReviewPanel(vesselMeta.mmsi, vesselMeta.name);
 });
 
 // ── Filter state ───────────────────────────────────────────────────────────
@@ -797,14 +791,20 @@ function loadVesselTypes() {
 
 // ── Review workflow panel ─────────────────────────────────────────────────
 let currentReviewMmsi = null;
-let reviewQueue = [];
-let reviewQueueIndex = -1;
+const briefCache = new Map();
 
 async function fetchLatestReview(mmsi) {
   const r = await fetch(`/api/reviews/${mmsi}`);
   if (r.status === 404) return null;
   if (!r.ok) throw new Error(`review fetch failed: ${r.status}`);
   return r.json();
+}
+
+async function fetchReviewHistory(mmsi, limit = 20) {
+  const r = await fetch(`/api/reviews/${mmsi}/history?limit=${limit}`);
+  if (!r.ok) throw new Error(`review history fetch failed: ${r.status}`);
+  const body = await r.json();
+  return Array.isArray(body.items) ? body.items : [];
 }
 
 function _pillForTier(tier) {
@@ -876,14 +876,102 @@ function renderReviewSummary(review) {
     `<div style="margin-top:0.4rem;"><strong>Evidence</strong><ul style="margin:0.25rem 0 0 1rem;">${refs || '<li>—</li>'}</ul></div>`;
 }
 
-async function openReviewPanel(mmsi, vesselName) {
+function renderVesselDetails(meta) {
+  const box = document.getElementById('review-vessel-details');
+  if (!meta) {
+    box.textContent = 'Select a vessel from the list.';
+    return;
+  }
+  const score = meta.confidence ? Number(meta.confidence).toFixed(2) : '—';
+  box.innerHTML =
+    `<div><strong>Name:</strong> ${_escapeHtml(meta.name)}</div>` +
+    `<div><strong>MMSI:</strong> ${_escapeHtml(meta.mmsi)}</div>` +
+    `<div><strong>Type:</strong> ${_escapeHtml(meta.vesselType)} &nbsp; <strong>Flag:</strong> ${_escapeHtml(meta.flag)}</div>` +
+    `<div><strong>Score:</strong> ${_escapeHtml(score)} &nbsp; <strong>Last seen:</strong> ${_escapeHtml(meta.lastSeen)}</div>` +
+    `<div><strong>Signals:</strong> ${_escapeHtml(meta.signals)}</div>`;
+}
+
+function renderReviewHistory(items) {
+  const box = document.getElementById('review-history-content');
+  if (!items || items.length === 0) {
+    box.textContent = 'No feedback history for this vessel.';
+    return;
+  }
+  const rows = items.slice(0, 10).map((it) => {
+    const when = _escapeHtml(it.reviewed_at || '—');
+    const tier = _escapeHtml(it.review_tier || '—');
+    const handoff = _escapeHtml((it.handoff_state || '—').replaceAll('_', ' '));
+    const by = _escapeHtml(it.reviewed_by || '—');
+    const rationale = _escapeHtml(it.rationale || '');
+    return `<li><strong>${tier}</strong> / ${handoff} by ${by}<br/><span style="color:#94a3b8;">${when}</span>${rationale ? `<br/>${rationale}` : ''}</li>`;
+  }).join('');
+  box.innerHTML = `<ul style="margin:0.15rem 0 0 1rem;display:grid;gap:0.35rem;">${rows}</ul>`;
+}
+
+async function loadBriefForReviewPanel(mmsi, vesselName) {
+  const box = document.getElementById('review-brief-content');
+  if (!mmsi) {
+    box.textContent = 'No explanation loaded.';
+    return;
+  }
+
+  if (briefCache.has(mmsi)) {
+    box.textContent = briefCache.get(mmsi);
+    return;
+  }
+
+  box.textContent = 'Loading LLM explanation...';
+  try {
+    const cachedResp = await fetch(`/api/briefs/${mmsi}/cached`);
+    if (cachedResp.ok) {
+      const cachedBody = await cachedResp.json();
+      if (cachedBody.available && cachedBody.brief) {
+        briefCache.set(mmsi, cachedBody.brief);
+        box.textContent = cachedBody.brief;
+        return;
+      }
+    }
+
+    const resp = await fetch(`/api/briefs/${mmsi}`);
+    if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const raw = decoder.decode(value, { stream: true });
+      for (const line of raw.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const chunk = line.slice(6);
+        if (chunk === '[DONE]') break;
+        fullText += chunk;
+      }
+      box.textContent = fullText || 'Loading LLM explanation...';
+    }
+    const normalized = fullText.trim() || `Brief unavailable for ${vesselName || mmsi}.`;
+    briefCache.set(mmsi, normalized);
+    box.textContent = normalized;
+  } catch {
+    box.textContent = 'Brief unavailable — check LLM configuration in .env';
+  }
+}
+
+async function openReviewPanel(mmsi, vesselName, vesselMeta = null) {
   currentReviewMmsi = mmsi;
   document.getElementById('review-vessel-label').textContent = `${vesselName} (MMSI ${mmsi})`;
   document.getElementById('review-panel').classList.add('active');
   document.getElementById('review-status').textContent = 'Loading latest review...';
+  renderVesselDetails(vesselMeta);
+  document.getElementById('review-history-content').textContent = 'Loading feedback history...';
 
   try {
-    const review = await fetchLatestReview(mmsi);
+    const [review, history] = await Promise.all([
+      fetchLatestReview(mmsi),
+      fetchReviewHistory(mmsi),
+    ]);
+    renderReviewHistory(history);
     if (review) {
       document.getElementById('review-tier-select').value = review.review_tier;
       document.getElementById('review-handoff-select').value = review.handoff_state;
@@ -909,6 +997,7 @@ async function openReviewPanel(mmsi, vesselName) {
     }
   } catch {
     document.getElementById('review-status').textContent = 'Failed to load review.';
+    document.getElementById('review-history-content').textContent = 'Failed to load feedback history.';
   }
 }
 
@@ -951,163 +1040,12 @@ async function saveReviewDecision() {
     const saved = await r.json();
     setRowReviewState(currentReviewMmsi, saved);
     renderReviewSummary(saved);
+    const history = await fetchReviewHistory(currentReviewMmsi);
+    renderReviewHistory(history);
     document.getElementById('review-status').textContent = 'Saved review decision.';
   } catch (err) {
     document.getElementById('review-status').textContent = `Save failed: ${err}`;
   }
-}
-
-function startQuickReview() {
-  const rows = Array.from(document.querySelectorAll('#watchlist-tbody tr.watchlist-row'));
-  reviewQueue = rows.map((r) => ({ mmsi: r.dataset.mmsi, name: r.dataset.name || r.dataset.mmsi })).filter((x) => x.mmsi);
-  reviewQueueIndex = 0;
-  if (reviewQueue.length === 0) {
-    document.getElementById('review-status').textContent = 'No candidates available in current Top-N list.';
-    return;
-  }
-  const cur = reviewQueue[reviewQueueIndex];
-  openReviewPanel(cur.mmsi, cur.name);
-}
-
-function openNextReviewCandidate() {
-  if (reviewQueue.length === 0) {
-    startQuickReview();
-    return;
-  }
-  reviewQueueIndex += 1;
-  if (reviewQueueIndex >= reviewQueue.length) {
-    reviewQueueIndex = reviewQueue.length - 1;
-    document.getElementById('review-status').textContent = 'Reached end of current quick-review queue.';
-    return;
-  }
-  const cur = reviewQueue[reviewQueueIndex];
-  openReviewPanel(cur.mmsi, cur.name);
-}
-
-// ── Chat panel ─────────────────────────────────────────────────────────────
-let currentChatMmsi = null;   // null = fleet / cross-vessel mode
-let chatHistory = [];          // [{role, content}, ...]
-let chatStreaming = false;
-
-function openAnalystBrief(mmsi, vesselName) {
-  document.querySelectorAll('.maplibregl-popup').forEach(p => p.remove());
-  currentChatMmsi = mmsi;
-  chatHistory = [];
-  document.getElementById('chat-vessel-label').textContent = `${vesselName} (MMSI ${mmsi})`;
-  document.getElementById('chat-messages').innerHTML = '';
-  document.getElementById('chat-panel').classList.add('active');
-  document.getElementById('chat-input').focus();
-
-  // Stream initial brief via existing cached GET endpoint
-  _streamBriefInitial(mmsi);
-}
-
-function openFleetChat() {
-  currentChatMmsi = null;
-  chatHistory = [];
-  document.getElementById('chat-vessel-label').textContent = 'Fleet Chat (cross-vessel)';
-  document.getElementById('chat-messages').innerHTML = '';
-  document.getElementById('chat-input').placeholder = 'Ask a cross-vessel question…';
-  document.getElementById('chat-panel').classList.add('active');
-  document.getElementById('chat-input').focus();
-}
-
-function closeChatPanel() {
-  document.getElementById('chat-panel').classList.remove('active');
-  currentChatMmsi = null;
-  chatHistory = [];
-  document.getElementById('chat-input').placeholder = 'Ask a follow-up question…';
-}
-
-function appendChatMessage(role, text) {
-  const msgs = document.getElementById('chat-messages');
-  const wrapper = document.createElement('div');
-  wrapper.className = `chat-msg ${role}`;
-  const label = document.createElement('div');
-  label.className = 'chat-msg-label';
-  label.textContent = role === 'user' ? 'You' : 'Analyst';
-  const bubble = document.createElement('div');
-  bubble.className = 'chat-msg-bubble';
-  bubble.textContent = text;
-  wrapper.appendChild(label);
-  wrapper.appendChild(bubble);
-  msgs.appendChild(wrapper);
-  msgs.scrollTop = msgs.scrollHeight;
-  return bubble;
-}
-
-async function _streamSse(resp, bubble) {
-  let fullText = '';
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const raw = decoder.decode(value, { stream: true });
-    for (const line of raw.split('\n')) {
-      if (!line.startsWith('data: ')) continue;
-      const chunk = line.slice(6);
-      if (chunk === '[DONE]') break;
-      fullText += chunk;
-      bubble.textContent = fullText;
-      document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
-    }
-  }
-  return fullText;
-}
-
-async function _streamBriefInitial(mmsi) {
-  if (chatStreaming) return;
-  chatStreaming = true;
-  document.getElementById('chat-send-btn').disabled = true;
-  const bubble = appendChatMessage('assistant', '');
-  try {
-    const resp = await fetch(`/api/briefs/${mmsi}`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const fullText = await _streamSse(resp, bubble);
-    if (fullText) chatHistory.push({ role: 'assistant', content: fullText });
-  } catch (err) {
-    bubble.textContent = 'Brief unavailable — check LLM configuration in .env';
-  }
-  chatStreaming = false;
-  document.getElementById('chat-send-btn').disabled = false;
-  document.getElementById('chat-input').focus();
-}
-
-async function streamChatResponse(message) {
-  if (chatStreaming) return;
-  chatStreaming = true;
-  document.getElementById('chat-send-btn').disabled = true;
-  const bubble = appendChatMessage('assistant', '');
-  try {
-    const body = { message, history: chatHistory.slice(0, -1) };
-    if (currentChatMmsi) body.mmsi = currentChatMmsi;
-    const resp = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const fullText = await _streamSse(resp, bubble);
-    if (fullText) chatHistory.push({ role: 'assistant', content: fullText });
-  } catch (err) {
-    bubble.textContent = 'Answer unavailable — check LLM configuration in .env';
-    chatHistory.pop(); // remove the user turn we pushed speculatively
-  }
-  chatStreaming = false;
-  document.getElementById('chat-send-btn').disabled = false;
-  document.getElementById('chat-input').focus();
-}
-
-async function sendChatMessage() {
-  if (chatStreaming) return;
-  const input = document.getElementById('chat-input');
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  appendChatMessage('user', text);
-  chatHistory.push({ role: 'user', content: text });
-  await streamChatResponse(text);
 }
 
 // ── SSE alert stream ───────────────────────────────────────────────────────

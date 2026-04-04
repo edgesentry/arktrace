@@ -98,11 +98,17 @@ def watchlist_top(
             signals_text = ", ".join(f"{s['feature']}" for s in signals[:2]) if signals else "—"
         except Exception:
             signals_text = str(row.get("top_signals", "—"))[:60]
+        safe_signals_attr = str(signals_text).replace("'", "&#39;")
+        safe_type_attr = str(row.get("vessel_type", "")).replace("'", "&#39;")
+        safe_flag_attr = str(row.get("flag", "")).replace("'", "&#39;")
+        safe_last_seen_attr = str(row.get("last_seen", "")).replace("'", "&#39;")
 
         lat = row.get("last_lat") or ""
         lon = row.get("last_lon") or ""
         rows_html.append(
-            f"<tr class='watchlist-row' data-mmsi='{row['mmsi']}' data-lat='{lat}' data-lon='{lon}' data-name='{safe_name_attr}'>"
+            f"<tr class='watchlist-row' data-mmsi='{row['mmsi']}' data-lat='{lat}' data-lon='{lon}' "
+            f"data-name='{safe_name_attr}' data-type='{safe_type_attr}' data-flag='{safe_flag_attr}' "
+            f"data-confidence='{conf:.4f}' data-last-seen='{safe_last_seen_attr}' data-signals='{safe_signals_attr}'>"
             f"<td>{row['mmsi']}</td>"
             f"<td>{vessel_name}</td>"
             f"<td>{row['vessel_type']}</td>"
@@ -111,7 +117,7 @@ def watchlist_top(
             f"<td class='signals'>{signals_text}</td>"
             f"<td class='review-tier' data-mmsi='{row['mmsi']}'>—</td>"
             f"<td class='review-handoff' data-mmsi='{row['mmsi']}'>—</td>"
-            f"<td><button class='brief-btn review-btn' onclick=\"event.stopPropagation(); openReviewPanel('{row['mmsi']}', '{safe_name_attr}');\">Review</button></td>"
+            f"<td><button class='review-btn' onclick=\"event.stopPropagation(); openReviewPanel('{row['mmsi']}', '{safe_name_attr}');\">Review</button></td>"
             f"</tr>"
         )
 
