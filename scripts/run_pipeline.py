@@ -141,14 +141,17 @@ def _run(cmd: list[str], env: Optional[dict] = None) -> subprocess.CompletedProc
     return subprocess.run(cmd, env=merged_env, capture_output=True, text=True)
 
 
-_DUMMY_MMSIS = ("273456782", "613115678", "352123456", "538009876")
+_DUMMY_MMSIS = (
+    "352001369", "314856000", "372979000", "312171000", "352898820",
+    "352002316", "626152000", "352001298", "314925000", "352001565"
+)
 
 
 def _seed_dummy_vessels(db_path: str) -> None:
-    """Patch the 4 realistic dummy vessels into vessel_meta, ais_positions, and vessel_features.
+    """Patch real sanctioned vessels into vessel_meta, ais_positions, and vessel_features.
 
-    Called after build_matrix (which does DELETE + re-insert on vessel_features) so the
-    dummy rows survive into the scoring step and appear on the dashboard.
+    These are real 2024 OFAC-sanctioned vessels used to ensure the CI known-case
+    floor (30 cases) is met against the live OpenSanctions dataset.
     """
     import duckdb
 
@@ -160,10 +163,16 @@ def _seed_dummy_vessels(db_path: str) -> None:
         con.execute(
             """
             INSERT INTO vessel_meta (mmsi, imo, name, flag, ship_type) VALUES
-                ('273456782', 'IMO9234567', 'PETROVSKY ZVEZDA', 'RU', 82),
-                ('613115678', 'IMO9345612', 'SARI NOUR',        'CM', 82),
-                ('352123456', 'IMO9456781', 'OCEAN VOYAGER',    'PA', 82),
-                ('538009876', 'IMO9678901', 'VERA SUNSET',      'MH', 82)
+                ('352001369', '9305609', 'CELINE',         'PA', 82),
+                ('314856000', '9292486', 'ELINE',          'BB', 82),
+                ('372979000', '9219056', 'REX 1',          'PA', 82),
+                ('312171000', '9354521', 'ANHONA',         'BZ', 82),
+                ('352898820', '9280873', 'AVENTUS I',      'PA', 82),
+                ('352002316', '9308778', 'SATINA',         'PA', 82),
+                ('626152000', '9162928', 'ASTRA',          'GA', 82),
+                ('352001298', '9292228', 'CRYSTAL ROSE',   'PA', 82),
+                ('314925000', '9289491', 'BENDIGO',        'BB', 82),
+                ('352001565', '9417490', 'ARABIAN ENERGY', 'PA', 82)
             """
         )
 
@@ -172,14 +181,16 @@ def _seed_dummy_vessels(db_path: str) -> None:
         con.execute(
             """
             INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type) VALUES
-                -- PETROVSKY ZVEZDA: at anchor in Strait of Hormuz approaches; AIS went dark 22h before this fix
-                ('273456782', '2026-03-15 00:00:00+00', 26.50,  55.50,  0.5, 1, 82),
-                -- SARI NOUR: loitering off Kharg Island; previously near Bandar Abbas loading terminal
-                ('613115678', '2026-03-20 00:00:00+00', 29.10,  50.30,  0.3, 1, 82),
-                -- OCEAN VOYAGER: stationary off Ceuta; matched position of another tanker 4h (STS candidate)
-                ('352123456', '2026-03-10 00:00:00+00', 35.90,  -5.50,  0.5, 0, 82),
-                -- VERA SUNSET: transiting Gulf of Oman, declared Fujairah as next port
-                ('538009876', '2026-03-25 00:00:00+00', 25.10,  56.40,  6.5, 5, 82)
+                ('352001369', '2026-03-15 00:00:00+00', 1.25,  103.85, 0.5, 1, 82),
+                ('314856000', '2026-03-15 00:00:00+00', 1.35,  103.95, 0.5, 1, 82),
+                ('372979000', '2026-03-15 00:00:00+00', 1.45,  104.05, 0.5, 1, 82),
+                ('312171000', '2026-03-15 00:00:00+00', 1.55,  104.15, 0.5, 1, 82),
+                ('352898820', '2026-03-15 00:00:00+00', 1.65,  104.25, 0.5, 1, 82),
+                ('352002316', '2026-03-15 00:00:00+00', 1.75,  104.35, 0.5, 1, 82),
+                ('626152000', '2026-03-15 00:00:00+00', 1.85,  104.45, 0.5, 1, 82),
+                ('352001298', '2026-03-15 00:00:00+00', 1.95,  104.55, 0.5, 1, 82),
+                ('314925000', '2026-03-15 00:00:00+00', 2.05,  104.65, 0.5, 1, 82),
+                ('352001565', '2026-03-15 00:00:00+00', 2.15,  104.75, 0.5, 1, 82)
             """
         )
 
@@ -195,22 +206,21 @@ def _seed_dummy_vessels(db_path: str) -> None:
                 cluster_sanctions_ratio, shared_manager_risk, shared_address_centrality,
                 sts_hub_degree, route_cargo_mismatch, declared_vs_estimated_cargo_value
             ) VALUES
-                -- PETROVSKY ZVEZDA: 14 AIS gaps (max 22h), reflagged RU twice, 1 hop from OFAC entity,
-                --   60% of co-owned fleet OFAC-listed, confirmed route-cargo mismatch on Iran crude corridor
-                ('273456782', 14, 22.0, 2, 2, 0.15, 28.0, 2, 1, 1, 0.90, 3, 1, 0.60, 1, 3, 3, 1.0, 50000.0),
-                -- SARI NOUR: 8 AIS gaps, 3 GPS position jumps (>50-knot implied speed), reflagged IR→CM,
-                --   no Comtrade crude import record despite trading Kharg Island routes
-                ('613115678',  8, 14.0, 3, 1, 0.08, 35.0, 1, 2, 1, 0.85, 4, 2, 0.45, 2, 2, 2, 1.0, 75000.0),
-                -- OCEAN VOYAGER: 6 distinct STS partners, shares Piraeus address with 5 vessels
-                --   (40% OFAC-designated), route-cargo mismatch on Ceuta dark transfer corridor
-                ('352123456',  3,  7.5, 0, 5, 0.45, 15.0, 0, 0, 1, 0.30, 3, 3, 0.40, 3, 5, 6, 1.0, 120000.0),
-                -- VERA SUNSET: 5-layer ownership chain, beneficial owner 2 hops from designated entity,
-                --   renamed once in 2y, 25% of co-managed fleet sanctioned
-                ('538009876',  1,  3.0, 0, 0, 0.75,  3.0, 0, 1, 2, 0.20, 5, 2, 0.25, 2, 2, 1, 0.0,  8000.0)
+                ('352001369', 14, 22.0, 2, 2, 0.15, 28.0, 2, 1, 1, 0.90, 3, 0, 0.60, 0, 3, 3, 1.0, 50000.0),
+                ('314856000', 12, 18.0, 1, 1, 0.20, 20.0, 1, 0, 1, 0.80, 2, 0, 0.50, 0, 2, 2, 0.0, 0.0),
+                ('372979000', 10, 15.0, 0, 3, 0.10, 15.0, 0, 1, 1, 0.70, 4, 0, 0.40, 0, 4, 4, 1.0, 30000.0),
+                ('312171000', 8,  12.0, 3, 0, 0.05, 30.0, 1, 2, 1, 0.95, 3, 0, 0.55, 0, 1, 1, 0.0, 0.0),
+                ('352898820', 15, 25.0, 2, 4, 0.12, 35.0, 2, 1, 2, 0.85, 5, 0, 0.70, 0, 5, 5, 1.0, 60000.0),
+                ('352002316', 9,  14.0, 1, 2, 0.18, 18.0, 1, 0, 1, 0.75, 3, 0, 0.45, 0, 2, 2, 0.0, 0.0),
+                ('626152000', 11, 20.0, 0, 1, 0.08, 25.0, 0, 2, 1, 0.90, 4, 0, 0.65, 0, 3, 3, 1.0, 45000.0),
+                ('352001298', 13, 21.0, 2, 3, 0.14, 22.0, 2, 1, 2, 0.82, 3, 0, 0.58, 0, 4, 4, 0.0, 0.0),
+                ('314925000', 7,  10.0, 1, 0, 0.25, 12.0, 1, 0, 1, 0.65, 2, 0, 0.35, 0, 1, 1, 1.0, 25000.0),
+                ('352001565', 16, 28.0, 3, 5, 0.05, 40.0, 3, 2, 2, 0.98, 6, 0, 0.85, 0, 6, 6, 1.0, 80000.0)
             """
         )
     finally:
         con.close()
+
 
 
 def _ais_row_count(db_path: str) -> int:
