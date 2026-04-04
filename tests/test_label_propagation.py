@@ -1,5 +1,3 @@
-from datetime import datetime
-
 import duckdb
 import pyarrow as pa
 import pytest
