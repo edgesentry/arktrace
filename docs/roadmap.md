@@ -203,6 +203,16 @@ Offline evaluation workflow using historical AIS windows and public label source
 - Batch summary and known-case coverage reports written to `data/processed/`
 - Documented in [`docs/backtesting-validation.md`](backtesting-validation.md)
 
+### C11 · Analyst Pre-Label Holdout Set *(Done — [#62](https://github.com/edgesentry/arktrace/issues/62))*
+
+Leading-indicator evaluation layer complementing C9's public-data backtest:
+
+- **`analyst_prelabels` DuckDB table** (`src/ingest/schema.py`): stores analyst-curated pre-labels (`suspected-positive` / `uncertain` / `analyst-negative`) with confidence tier, evidence notes, source links, and timestamped attribution
+- **`src/score/prelabel_evaluation.py`**: evaluation module; accepts pre-labels from DB or CSV; leakage guard (`evidence_timestamp <= window_end_date`); computes precision@K, recall@K, AUROC, PR-AUC as a separate reporting slice; disagreement analysis (model-high vs analyst-negative and model-low vs analyst-positive)
+- **`data/demo/analyst_prelabels_demo.csv`**: initial curated holdout set — 60 vessels, 3 regions (Singapore, Middle East, Europe), evidence window Sep–Nov 2025
+- **`scripts/run_prelabel_evaluation.py`**: CLI entry point
+- Governance policy (taxonomy, leakage rules, review cadence, versioning) documented in [`docs/prelabel-governance.md`](prelabel-governance.md)
+
 ### C10 · Delayed-Label Intelligence Loop *(Done — [#67](https://github.com/edgesentry/arktrace/issues/67))*
 
 Converts delayed confirmed labels into forward-looking detection power without full model retrain:
