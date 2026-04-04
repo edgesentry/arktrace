@@ -31,7 +31,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import duckdb
-import polars as pl
 from dotenv import load_dotenv
 
 load_dotenv()
