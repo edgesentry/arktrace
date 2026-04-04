@@ -26,7 +26,6 @@ See docs/prelabel-governance.md for full policy documentation.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
