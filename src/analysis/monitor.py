@@ -414,7 +414,7 @@ def run_drift_checks(
     if as_of is None:
         as_of = datetime.now(timezone.utc)
 
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     try:
         alerts = [
             check_ais_gap_rate(con, as_of, gap_threshold_h),

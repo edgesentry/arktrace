@@ -125,7 +125,7 @@ def _read_cached_brief(mmsi: str, version: str, db_path: str | None = None) -> s
     if not os.path.exists(db_path):
         return None
     try:
-        con = duckdb.connect(db_path, read_only=True)
+        con = duckdb.connect(db_path)
         rows = con.execute(
             "SELECT brief FROM analyst_briefs WHERE mmsi = ? AND watchlist_version = ?",
             [mmsi, version],

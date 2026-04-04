@@ -271,7 +271,7 @@ def score_unknown_unknowns(
     if as_of is None:
         as_of = datetime.now(timezone.utc)
 
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     try:
         mmsis = _fetch_unsanctioned_mmsis(con)
         if not mmsis:

@@ -113,7 +113,7 @@ def _read_cache(key: str) -> str | None:
     if not os.path.exists(path):
         return None
     try:
-        con = duckdb.connect(path, read_only=True)
+        con = duckdb.connect(path)
         rows = con.execute(
             "SELECT response FROM chat_cache WHERE cache_key = ?", [key]
         ).fetchall()
