@@ -13,6 +13,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from src.analysis.causal import score_unknown_unknowns
 from src.api.llm import get_llm_client
 from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
 from src.storage.config import output_uri
@@ -42,7 +43,7 @@ TOP RISK SIGNALS:
 
 RECENT GEOPOLITICAL CONTEXT:
 {gdelt_text}
-"""
+{causal_context}"""
 
 _USER_TEMPLATE = (
     "Write a one-paragraph analyst brief for {vessel_name} (MMSI {mmsi}). "
@@ -74,6 +75,23 @@ def _format_signals(top_signals_json: str | None) -> str:
         return "\n".join(lines) or "No signals."
     except Exception:
         return str(top_signals_json)[:200]
+
+
+def _fetch_causal_context(mmsi: str, db_path: str | None = None) -> str:
+    """Return causal evidence prompt context for a vessel, or empty string."""
+    if db_path is None:
+        db_path = os.getenv("DB_PATH", _DEFAULT_DB_PATH)
+    if not os.path.exists(db_path):
+        return ""
+    try:
+        candidates = score_unknown_unknowns(db_path=db_path)
+        for candidate in candidates:
+            if candidate.mmsi == mmsi:
+                ctx = candidate.prompt_context()
+                return f"\n{ctx}\n" if ctx else ""
+    except Exception:
+        logger.debug("Causal context unavailable for mmsi=%s", mmsi)
+    return ""
 
 
 def _format_gdelt(events: list[dict]) -> str:
@@ -163,6 +181,7 @@ async def _generate_brief_tokens(vessel: dict) -> list[str]:
         confidence=float(vessel.get("confidence", 0)),
         signals_text=_format_signals(vessel.get("top_signals")),
         gdelt_text=_format_gdelt(gdelt_events),
+        causal_context=_fetch_causal_context(vessel.get("mmsi", "")),
     )
     user = _USER_TEMPLATE.format(
         vessel_name=vessel_name,
@@ -233,6 +252,7 @@ async def vessel_brief(mmsi: str) -> StreamingResponse:
                 confidence=float(vessel.get("confidence", 0)),
                 signals_text=_format_signals(vessel.get("top_signals")),
                 gdelt_text=_format_gdelt(gdelt_events),
+                causal_context=_fetch_causal_context(vessel.get("mmsi", "")),
             )
             user = _USER_TEMPLATE.format(
                 vessel_name=vessel_name,
@@ -284,6 +304,7 @@ def _build_vessel_system(vessel: dict) -> str:
         confidence=float(vessel.get("confidence", 0)),
         signals_text=_format_signals(vessel.get("top_signals")),
         gdelt_text=_format_gdelt(gdelt_events),
+        causal_context=_fetch_causal_context(vessel.get("mmsi", "")),
     )
 
 
