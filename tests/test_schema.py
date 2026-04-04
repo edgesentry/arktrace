@@ -16,6 +16,7 @@ def test_all_tables_created(tmp_db):
         "chat_cache",
         "cleared_vessels",
         "vessel_reviews",
+        "analyst_prelabels",
     }
 
 

@@ -237,6 +237,38 @@ RUN_PUBLIC_DATA_TESTS=1 \
 Optional fallback (not recommended for daily runs): if `PUBLIC_SANCTIONS_DB` does not exist,
 you can allow the test to prepare data on demand by setting `PREPARE_PUBLIC_DATA_IF_MISSING=1`.
 
+## Analyst Pre-Label Holdout Evaluation
+
+The public-data backtest measures detection of *already-confirmed* cases. The pre-label holdout evaluation adds a **leading-indicator slice**: vessels the analyst suspects *before* any public confirmation.
+
+Pre-labels use a three-tier taxonomy (`suspected-positive` / `uncertain` / `analyst-negative`) with analyst confidence tiers (`high` / `medium` / `weak`). A leakage guard ensures `evidence_timestamp <= window_end_date`.
+
+Initial curated set: **60 vessels across 3 regions** — `data/demo/analyst_prelabels_demo.csv`.
+
+Run against a watchlist:
+
+```bash
+uv run python -m src.score.prelabel_evaluation \
+  --watchlist data/processed/candidate_watchlist.parquet \
+  --prelabels-csv data/demo/analyst_prelabels_demo.csv \
+  --output data/processed/prelabel_evaluation.json \
+  --end-date 2025-11-15 \
+  --min-confidence-tier medium \
+  --review-capacities 25,50,100
+```
+
+Output includes:
+- Pre-label slice metrics: `precision_at_50`, `recall_at_100`, `auroc`, `pr_auc`
+- Disagreement analysis: `model_high_analyst_negative` + `model_low_analyst_positive`
+- Leakage report: count of labels dropped for the window
+- Confidence tier breakdown (high / medium / weak precision separately)
+
+Do **not** merge this slice with public-label metrics. Run both and compare — divergence between the two slices signals novel evasion patterns not yet captured by public lists.
+
+Full governance policy (leakage rules, review cadence, versioning): [`docs/prelabel-governance.md`](prelabel-governance.md).
+
+---
+
 ## Demo-size Sample Dataset
 
 For demos, you can build a small sample DB from the prepared public DB.

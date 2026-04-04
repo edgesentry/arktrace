@@ -112,6 +112,24 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
             ON vessel_reviews (mmsi, reviewed_at)
         """)
         con.execute("""
+            CREATE TABLE IF NOT EXISTS analyst_prelabels (
+                mmsi                VARCHAR NOT NULL,
+                imo                 VARCHAR,
+                pre_label           VARCHAR NOT NULL,
+                confidence_tier     VARCHAR NOT NULL,
+                region              VARCHAR,
+                evidence_notes      TEXT,
+                source_urls_json    TEXT,
+                analyst_id          VARCHAR NOT NULL,
+                evidence_timestamp  TIMESTAMPTZ NOT NULL,
+                created_at          TIMESTAMPTZ DEFAULT now()
+            )
+        """)
+        con.execute("""
+            CREATE INDEX IF NOT EXISTS idx_analyst_prelabels_mmsi
+            ON analyst_prelabels (mmsi, evidence_timestamp)
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS vessel_features (
                 mmsi                       VARCHAR PRIMARY KEY,
                 ais_gap_count_30d          INTEGER,
