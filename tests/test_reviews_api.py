@@ -98,3 +98,35 @@ def test_invalid_tier_rejected(review_client: TestClient) -> None:
 def test_get_missing_review_returns_404(review_client: TestClient) -> None:
     r = review_client.get("/api/reviews/999999999")
     assert r.status_code == 404
+
+
+def test_review_history_returns_all_records(review_client: TestClient) -> None:
+    review_client.post(
+        "/api/reviews",
+        json={
+            "mmsi": "555555555",
+            "review_tier": "suspect",
+            "handoff_state": "in_review",
+            "rationale": "Initial suspicion.",
+            "reviewed_by": "analyst-a",
+        },
+    )
+    review_client.post(
+        "/api/reviews",
+        json={
+            "mmsi": "555555555",
+            "review_tier": "confirmed",
+            "handoff_state": "handoff_recommended",
+            "rationale": "Escalated with corroborating signals.",
+            "reviewed_by": "analyst-b",
+        },
+    )
+
+    r = review_client.get("/api/reviews/555555555/history?limit=10")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["mmsi"] == "555555555"
+    assert body["count"] == 2
+    assert len(body["items"]) == 2
+    assert body["items"][0]["review_tier"] == "confirmed"
+    assert body["items"][1]["review_tier"] == "suspect"

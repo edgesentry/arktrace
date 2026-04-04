@@ -168,3 +168,28 @@ def get_latest_review(mmsi: str) -> ReviewResponse:
         return _row_to_response(rows[0])
     finally:
         con.close()
+
+
+@router.get("/api/reviews/{mmsi}/history")
+def get_review_history(mmsi: str, limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 200))
+    con = _connect()
+    try:
+        rows = con.execute(
+            """
+            SELECT mmsi, review_tier, handoff_state, rationale, evidence_refs_json, reviewed_by, reviewed_at
+            FROM vessel_reviews
+            WHERE mmsi = ?
+            ORDER BY reviewed_at DESC
+            LIMIT ?
+            """,
+            [mmsi.strip(), safe_limit],
+        ).fetchdf().to_dict("records")
+    finally:
+        con.close()
+
+    return {
+        "mmsi": mmsi.strip(),
+        "count": len(rows),
+        "items": [_row_to_response(r).model_dump() for r in rows],
+    }

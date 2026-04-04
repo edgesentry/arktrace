@@ -16,6 +16,20 @@ uv run python scripts/run_pipeline.py --region singapore --non-interactive
 
 Prerequisites: a valid `AISSTREAM_API_KEY` in `.env` and Python 3.12+.
 
+### Interactive operations shell
+
+Run a menu-driven shell that lets you execute common operations jobs and prints a result summary after each run.
+
+```bash
+bash scripts/run_operations_shell.sh
+```
+
+Available menu jobs:
+- Full Screening
+- Review-Feedback Evaluation
+- Historical Backtesting + Public Integration Batch
+- Demo/Smoke
+
 ---
 
 ## Region presets

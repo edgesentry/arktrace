@@ -8,6 +8,17 @@ It focuses on four questions:
 3. When should it run?
 4. What result should operators expect?
 
+## Scope Clarification: Backend Jobs vs Web UI Operations
+
+The pipeline types in this document refer to backend execution jobs (batch, scheduled, or event-triggered runs), not manual button-by-button work in the web dashboard.
+
+- Backend jobs:
+	- Run by CI/CD, schedulers (cron/orchestrator), long-running services, or operator-triggered CLI/API calls.
+	- Produce and refresh data artifacts such as DuckDB tables, watchlists, scores, and evaluation reports.
+- Web UI operations:
+	- Human review and investigation workflow in the dashboard (filter, inspect vessel detail, submit tier/handoff decisions).
+	- Consume pipeline outputs and write review feedback, but do not replace core ingestion/scoring/evaluation pipeline execution.
+
 For implementation-level commands and flags, see [Pipeline Operations](pipeline-operations.md).
 
 ## Pipeline Types At A Glance
@@ -202,13 +213,13 @@ Provide fast deterministic validation of dashboard and operator flow without ful
 
 ## Suggested Operations Cadence
 
-| Cadence | Pipeline | Goal |
-|---|---|---|
-| Continuous | Continuous Monitoring | Live situational awareness |
-| Daily or per watch | Full Screening (if non-streaming mode) | Fresh candidate ranking |
-| Weekly | Review-Feedback Evaluation | Threshold tuning and drift control |
-| Pre-release | Historical Backtesting + Public Integration Batch | Quality gate before change promotion |
-| On-demand | Demo/Smoke | Fast verification and incident checks |
+| Cadence | Pipeline | Goal | Trigger Type | Triggered By (if Event) |
+|---|---|---|---|---|
+| Continuous | Continuous Monitoring | Live situational awareness | Scheduled (always-on service loop) | N/A |
+| Daily or per watch | Full Screening (if non-streaming mode) | Fresh candidate ranking | Scheduled or Event-triggered | Duty operations officer / shift lead |
+| Weekly | Review-Feedback Evaluation | Threshold tuning and drift control | Scheduled | N/A |
+| Pre-release | Historical Backtesting + Public Integration Batch | Quality gate before change promotion | Event-triggered | Release owner / CI pipeline on release candidate |
+| On-demand | Demo/Smoke | Fast verification and incident checks | Event-triggered | Analyst / operator / incident commander |
 
 ## Decision Guide
 
