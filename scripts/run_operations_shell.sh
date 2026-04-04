@@ -203,7 +203,7 @@ PY
 
 run_demo_smoke() {
   echo
-  echo "[4] Demo/Smoke"
+  echo "[5] Demo/Smoke"
 
   local cmd=(uv run python scripts/use_demo_watchlist.py)
   if prompt_yes_no "Backup existing candidate_watchlist.parquet" "true"; then
@@ -221,7 +221,7 @@ run_demo_smoke() {
 
 run_backtracking() {
   echo
-  echo "[5] Delayed-Label Intelligence (Backtracking)"
+  echo "[4] Delayed-Label Intelligence (Backtracking)"
 
   local db_path
   db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
@@ -273,7 +273,7 @@ PY
 
 run_prepare_sanctions_db() {
   echo
-  echo "[7] Prepare Public Sanctions DB"
+  echo "[9] Prepare Public Sanctions DB"
 
   local db_path
   db_path="$(prompt "DuckDB output path" "data/processed/public_eval.duckdb")"
@@ -300,7 +300,7 @@ run_prepare_sanctions_db() {
 
 run_build_sanctions_demo() {
   echo
-  echo "[8] Build Sanctions Demo Sample"
+  echo "[10] Build Sanctions Demo Sample"
 
   local source_db
   source_db="$(prompt "Source DuckDB path" "data/processed/public_eval.duckdb")"
@@ -323,7 +323,7 @@ run_build_sanctions_demo() {
 
 run_prelabel_evaluation() {
   echo
-  echo "[10] Pre-Label Holdout Evaluation"
+  echo "[8] Pre-Label Holdout Evaluation"
 
   local watchlist_path
   watchlist_path="$(prompt "Watchlist parquet path" "data/processed/candidate_watchlist.parquet")"
@@ -424,7 +424,7 @@ PY
 
 run_causal_analysis() {
   echo
-  echo "[9] Causal Analysis & Drift Check"
+  echo "[7] Causal Analysis & Drift Check"
 
   local db_path
   db_path="$(prompt "DuckDB path" "data/processed/singapore.duckdb")"
@@ -524,14 +524,14 @@ main_menu() {
     echo "     When: after a model change or scoring parameter update, before promoting to prod"
     echo "      Who: ML engineer, QA"
     echo
-    echo "5) Delayed-Label Intelligence"
+    echo "4) Delayed-Label Intelligence"
     echo "     What: retroactively detect precursor signals for newly confirmed vessels;"
     echo "           propagate risk labels to co-owned/managed/STS-contacted vessels"
     echo "     When: after analysts confirm new vessels (run weekly or post-batch)"
     echo "      Who: data scientist, intelligence analyst"
     echo
     echo "── DEVELOPMENT / LOCAL TESTING ─────────────────────────────────────────────────"
-    echo "4) Demo/Smoke"
+    echo "5) Demo/Smoke"
     echo "     What: load a fixed demo watchlist so the dashboard has realistic data without"
     echo "           running a full pipeline"
     echo "     When: preparing a demo, smoke-testing UI changes, or onboarding a new dev"
@@ -544,28 +544,28 @@ main_menu() {
     echo "     When: setting up a local dev environment or testing the backtracking loop"
     echo "      Who: developer, data engineer"
     echo
-    echo "9) Causal Analysis & Drift Check"
+    echo "7) Causal Analysis & Drift Check"
     echo "     What: run drift monitor (data + concept drift) and score unknown-unknown"
     echo "           evasion candidates against a given DB"
     echo "     When: after a pipeline run, or to verify issue #63 acceptance criteria"
     echo "      Who: data scientist, intelligence analyst"
     echo
-    echo "10) Pre-Label Holdout Evaluation"
+    echo "8) Pre-Label Holdout Evaluation"
     echo "     What: evaluate watchlist ranking against analyst-curated pre-labels;"
     echo "           reports leading-indicator precision/recall and disagreement analysis"
     echo "           (model-high vs analyst-cleared; model-low vs analyst-suspected)"
-    echo "     When: after a scoring run, to verify issue #62 acceptance criteria"
+    echo "     When: after a scoring run, or to verify issue #62 acceptance criteria"
     echo "      Who: data scientist, intelligence analyst"
     echo
     echo "── DATA SETUP (run once / when sanctions data is stale) ─────────────────────────"
-    echo "7) Prepare Sanctions DB"
+    echo "9) Prepare Sanctions DB"
     echo "     What: download OpenSanctions dataset and load it into public_eval.duckdb"
     echo "     When: initial setup, or when the sanctions dataset needs refreshing (monthly)"
     echo "      Who: data engineer"
     echo
-    echo "8) Build Sanctions Demo Sample"
+    echo "10) Build Sanctions Demo Sample"
     echo "     What: slice a small demo DuckDB from the full sanctions DB for fast UI testing"
-    echo "     When: after job 7, or when the demo dataset is out of date"
+    echo "     When: after job 9, or when the demo dataset is out of date"
     echo "      Who: developer, product"
     echo
     echo "────────────────────────────────────────────────────────────────────────────────"
@@ -579,13 +579,13 @@ main_menu() {
       1) run_full_screening ;;
       2) run_review_feedback ;;
       3) run_backtesting_public_batch ;;
-      4) run_demo_smoke ;;
-      5) run_backtracking ;;
+      4) run_backtracking ;;
+      5) run_demo_smoke ;;
       6) run_seed_dev_data ;;
-      9) run_causal_analysis ;;
-      10) run_prelabel_evaluation ;;
-      7) run_prepare_sanctions_db ;;
-      8) run_build_sanctions_demo ;;
+      7) run_causal_analysis ;;
+      8) run_prelabel_evaluation ;;
+      9) run_prepare_sanctions_db ;;
+      10) run_build_sanctions_demo ;;
       q|quit|exit)
         echo "Bye"
         return
