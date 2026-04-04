@@ -78,16 +78,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: uv sync --all-extras
-
-      - name: Install pip-licenses
-        run: uv pip install pip-licenses
+      - name: Install dependencies (including dev for pip-licenses)
+        run: uv sync --all-extras --group dev
 
       - name: Check licenses (deny copyleft)
         # Fail if any installed package carries a copyleft license.
         # Permissive licenses (MIT, Apache-2.0, BSD-*, ISC, PSF) are allowed.
-        # Pattern covers: GPL (any version), LGPL, AGPL, EUPL, and similar copyleft families.
         run: |
           uv run pip-licenses --format=csv > /tmp/licenses.csv
           python3 - <<'EOF'
