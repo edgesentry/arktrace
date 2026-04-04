@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from datetime import datetime, timedelta, timezone
 import logging
 
