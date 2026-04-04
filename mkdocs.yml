@@ -47,4 +47,7 @@ nav:
     - Pipeline Operations: pipeline-operations.md
     - Regional Playbooks: regional-playbooks.md
     - Backtesting Validation: backtesting-validation.md
+    - Pre-Label Governance: prelabel-governance.md
+    - Backtracking Runbook: backtracking-runbook.md
+    - Causal Analysis: causal-analysis.md
     - Deployment: deployment.md

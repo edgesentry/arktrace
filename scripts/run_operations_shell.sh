@@ -321,6 +321,107 @@ run_build_sanctions_demo() {
   echo "Artifact: $PROJECT_ROOT/$demo_db"
 }
 
+run_prelabel_evaluation() {
+  echo
+  echo "[10] Pre-Label Holdout Evaluation"
+
+  local watchlist_path
+  watchlist_path="$(prompt "Watchlist parquet path" "data/processed/candidate_watchlist.parquet")"
+
+  local source_choice
+  echo "  Pre-label source:"
+  echo "    1) Demo CSV  (data/demo/analyst_prelabels_demo.csv)"
+  echo "    2) DuckDB    (analyst_prelabels table)"
+  read -r -p "  Choose [1]: " source_choice
+  source_choice="${source_choice:-1}"
+
+  local end_date
+  end_date="$(prompt "Leakage cutoff date (ISO-8601, leave blank to include all)" "")"
+
+  local min_tier
+  min_tier="$(prompt "Min confidence tier (high/medium/weak)" "medium")"
+
+  local output_path
+  output_path="$(prompt "Output report path" "data/processed/prelabel_evaluation.json")"
+
+  local cmd=(uv run python -m src.score.prelabel_evaluation
+    --watchlist "$watchlist_path"
+    --output "$output_path"
+    --min-confidence-tier "$min_tier"
+    --review-capacities 25,50,100
+  )
+
+  if [[ "$source_choice" == "2" ]]; then
+    local db_path
+    db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+    cmd+=(--db "$db_path")
+  else
+    cmd+=(--prelabels-csv "data/demo/analyst_prelabels_demo.csv")
+  fi
+
+  if [[ -n "$end_date" ]]; then
+    cmd+=(--end-date "$end_date")
+  fi
+
+  if ! run_cmd "${cmd[@]}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  local abs_output="$PROJECT_ROOT/$output_path"
+  REPORT_PATH="$abs_output" uv run python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+path = Path(os.environ["REPORT_PATH"]).resolve()
+if not path.exists():
+    print("Result: SUCCESS, but report was not found")
+    raise SystemExit(0)
+
+report = json.loads(path.read_text())
+result = report.get("result", {})
+m = result.get("metrics", {})
+leak = result.get("leakage_report", {})
+dis = result.get("disagreement", {})
+
+print("Result: SUCCESS")
+print(
+    f"Metrics: candidates={m.get('candidate_count', 0)}, "
+    f"labeled={m.get('labeled_count', 0)}, "
+    f"positives={m.get('positive_count', 0)}, "
+    f"precision@50={m.get('precision_at_50', 0.0):.3f}, "
+    f"recall@100={m.get('recall_at_100', 0.0):.3f}, "
+    f"auroc={m.get('auroc') or 'n/a'}"
+)
+print(
+    f"Leakage: {leak.get('labels_dropped', 0)} pre-labels dropped "
+    f"(evidence after cutoff date)"
+)
+print(
+    f"Disagreement: model-high/analyst-negative={dis.get('model_high_analyst_negative_count', 0)}, "
+    f"model-low/analyst-positive={dis.get('model_low_analyst_positive_count', 0)}"
+)
+
+tier_breakdown = result.get("confidence_tier_breakdown", {})
+if tier_breakdown:
+    print("Tier breakdown:")
+    for tier, stats in tier_breakdown.items():
+        print(
+            f"  {tier}: count={stats['count']}, "
+            f"positives={stats['positive_count']}, "
+            f"precision@50={stats['precision_at_50']:.3f}"
+        )
+
+if dis.get("model_low_analyst_positive"):
+    print("Model missed (low-score suspected-positives):")
+    for row in dis["model_low_analyst_positive"][:3]:
+        print(f"  mmsi={row.get('mmsi')} score={row.get('confidence', '?'):.3f} notes={row.get('evidence_notes', '')[:60]}")
+
+print(f"Artifact: {path}")
+PY
+}
+
 run_causal_analysis() {
   echo
   echo "[9] Causal Analysis & Drift Check"
@@ -449,6 +550,13 @@ main_menu() {
     echo "     When: after a pipeline run, or to verify issue #63 acceptance criteria"
     echo "      Who: data scientist, intelligence analyst"
     echo
+    echo "10) Pre-Label Holdout Evaluation"
+    echo "     What: evaluate watchlist ranking against analyst-curated pre-labels;"
+    echo "           reports leading-indicator precision/recall and disagreement analysis"
+    echo "           (model-high vs analyst-cleared; model-low vs analyst-suspected)"
+    echo "     When: after a scoring run, to verify issue #62 acceptance criteria"
+    echo "      Who: data scientist, intelligence analyst"
+    echo
     echo "── DATA SETUP (run once / when sanctions data is stale) ─────────────────────────"
     echo "7) Prepare Sanctions DB"
     echo "     What: download OpenSanctions dataset and load it into public_eval.duckdb"
@@ -475,6 +583,7 @@ main_menu() {
       5) run_backtracking ;;
       6) run_seed_dev_data ;;
       9) run_causal_analysis ;;
+      10) run_prelabel_evaluation ;;
       7) run_prepare_sanctions_db ;;
       8) run_build_sanctions_demo ;;
       q|quit|exit)
