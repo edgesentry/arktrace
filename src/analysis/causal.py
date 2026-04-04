@@ -107,17 +107,23 @@ class UnknownUnknownCandidate:
             for ev in self.causal_evidence:
                 lines.append(f"  • {ev.to_prompt_context()}")
         if self.matching_signals:
-            lines.append("BEHAVIOURAL SIGNALS:")
+            lines.append("SHADOW SIGNAL — BEHAVIOURAL INDICATORS:")
             for sig in self.matching_signals:
+                feature_label = {
+                    "ais_gap_count": "AIS disappearances (recent spike)",
+                    "sts_candidate_count": "Ship-to-ship transfer activity",
+                    "flag_changes_2y": "Flag / identity changes in past 2 years",
+                }.get(sig.feature, sig.feature)
                 lines.append(
-                    f"  • {sig.feature}: recent={sig.recent_value:.2f}, "
-                    f"baseline={sig.baseline_value:.2f}, "
-                    f"uplift×{sig.uplift_ratio:.2f}"
+                    f"  • {feature_label}: "
+                    f"recent {sig.recent_value:.1f} vs baseline {sig.baseline_value:.1f} "
+                    f"({sig.uplift_ratio:.1f}× above normal)"
                 )
         lines.append(
-            "NOTE: This vessel is NOT in any current sanctions list.  "
-            "Score reflects behavioural similarity to known evasion patterns.  "
-            "Treat as investigative lead, not confirmed finding."
+            "ANALYST NOTE: This vessel does not appear on any current sanctions list, "
+            "but its recent behaviour closely matches patterns seen in vessels that were "
+            "later confirmed as shadow-fleet operators. This is an early-warning signal — "
+            "treat as an investigative lead requiring further evidence before any action."
         )
         return "\n".join(lines)
 

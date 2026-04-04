@@ -521,7 +521,7 @@
             <th>Flag</th>
             <th>Score</th>
             <th>Signals</th>
-            <th title="Unknown-unknown causal candidate">U-U</th>
+            <th title="Shadow Signal: vessel not on any sanctions list but showing behaviour consistent with known evasion patterns. Score 0–1, higher = stronger match.">Shadow Signal</th>
             <th>Tier</th>
             <th>Handoff</th>
             <th>Review</th>
@@ -930,7 +930,9 @@ function renderVesselDetails(meta) {
         `uplift&nbsp;&times;${s.uplift_ratio.toFixed(1)}`
       ).join('<br/>');
       area.innerHTML =
-        `<div class="causal-badge">&#9888; UNKNOWN-UNKNOWN &nbsp; score&nbsp;${data.causal_score.toFixed(2)}</div>` +
+        `<div class="causal-badge">&#9888; Shadow Signal &nbsp; ${data.causal_score.toFixed(2)}</div>` +
+        `<div class="causal-signals" style="margin-top:0.2rem;color:#94a3b8;font-size:0.69rem;">` +
+        `Not on any sanctions list — behaviour matches known evasion patterns.</div>` +
         (signalLines ? `<div class="causal-signals">${signalLines}</div>` : '');
     })
     .catch(() => {});
@@ -1105,7 +1107,7 @@ function refreshCausalBadges() {
         const mmsi = td.dataset.mmsi;
         if (candidateMap.has(mmsi)) {
           const score = candidateMap.get(mmsi).toFixed(2);
-          td.innerHTML = `<span class="causal-badge" title="Unknown-unknown candidate — score ${score}">&#9888; ${score}</span>`;
+          td.innerHTML = `<span class="causal-badge" title="Not on any sanctions list, but behaviour matches known evasion patterns. Score: ${score}">&#9888; ${score}</span>`;
         } else {
           td.innerHTML = '';
         }

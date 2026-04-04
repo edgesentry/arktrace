@@ -102,9 +102,9 @@ def test_candidate_prompt_context_no_evidence():
         causal_evidence=[],
     )
     ctx = candidate.prompt_context()
-    assert "BEHAVIOURAL SIGNALS" in ctx
-    assert "ais_gap_count" in ctx
-    assert "NOT in any current sanctions list" in ctx
+    assert "SHADOW SIGNAL" in ctx
+    assert "AIS disappearances" in ctx
+    assert "investigative lead" in ctx
 
 
 def test_candidate_prompt_context_with_evidence():
