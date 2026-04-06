@@ -246,3 +246,32 @@ Per-region weight tuning recommendations are in [regional-playbooks.md](regional
 ### Explainability (SHAP)
 
 SHAP TreeExplainer computes per-feature contributions to the anomaly score for each vessel. The top 3 contributing features are serialised as `top_signals` JSON in the watchlist output, enabling a duty officer to understand *why* a vessel was flagged without reading raw feature values.
+
+---
+
+## LLM Integration
+
+The LLM converts a deterministic, structured risk assessment into readable English for the analyst. All scoring decisions are made before the LLM is called; the model receives a pre-computed context window and cannot modify scores or access external data.
+
+**Use cases:**
+
+| Code | Input | Output |
+|------|-------|--------|
+| C2 — Analyst brief | Vessel profile + SHAP `top_signals` + 3 GDELT events | One-paragraph risk summary per vessel |
+| C6 — Analyst chat | Fleet overview + optional vessel detail + analyst question | Grounded factual answer |
+
+**Provider selection:** controlled by `LLM_PROVIDER` environment variable.
+
+| Value | Backend |
+|-------|---------|
+| `ollama` | Ollama local server (default) |
+| `mlx` | mlx-lm-coding-agent-proxy (Apple Silicon) |
+| `lmstudio` | LM Studio local server |
+| `anthropic` | Anthropic API (requires `ANTHROPIC_API_KEY`) |
+| `gemini` | Google Gemini API (requires `GEMINI_API_KEY`) |
+
+Recommended local model: **Qwen 2.5 Coder 7B Instruct (4-bit)** via Ollama or mlx-lm. Context window fits within ~1 200 tokens; no GPU required for 4-bit on Apple Silicon.
+
+**No cloud dependency:** inference runs entirely on-device by default. The LLM has no tool access, no function calling, and no internet connectivity during inference. Context is injected via the context window only.
+
+See [docs/local-llm-setup.md](local-llm-setup.md) for model recommendations, hardware requirements, and setup instructions.
