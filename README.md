@@ -1,14 +1,14 @@
 # arktrace
 
-Open-source Maritime Pattern of Life (MPOL) analysis pipeline for identifying shadow fleet vessel candidates using public data.
+**Causal Inference Engine for Shadow Fleet Prediction** — identifies vessels that *causally respond* to sanction announcements with evasion behaviour, surfacing unknown-unknown threats **60–90 days before** they appear on public sanctions lists.
 
 Built for **Cap Vista Accelerator Solicitation 5.0, Challenge 1** (deadline: 29 April 2026).
 
 ## What It Does
 
-Ingests public AIS, sanctions, vessel registry, and trade flow data to produce a ranked watchlist of candidate shadow fleet vessels — ships operating in the regulatory grey zone through AIS manipulation, flag/name laundering, and illicit ship-to-ship transfers.
+arktrace applies Difference-in-Differences (DiD) causal modelling to identify vessels whose behaviour changed *specifically because of* a sanction event — not merely vessels that look anomalous. AIS position history, ownership graph proximity, and trade flow data serve as the evidentiary substrate; the novel methodology is causal inference and network-based backtracking propagation.
 
-**Output:** `data/processed/candidate_watchlist.parquet` — ranked vessels with composite confidence scores and SHAP-explained top signals, ready to hand off to a patrol officer.
+**Output:** `data/processed/candidate_watchlist.parquet` — ranked vessels with SHAP-explained causal and network signals, pre-designation lead time backtested at 60–90 days before OFAC listing, ready to hand off to a patrol officer.
 
 ## Why this project is called Arktrace?
 
