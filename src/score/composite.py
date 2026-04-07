@@ -424,7 +424,7 @@ def _compute_top_signals(feature_df: pl.DataFrame, model, scaled_matrix: np.ndar
                         "contribution": round(abs(float(shap_row[col_idx])) / denom, 3),
                     }
                 )
-            contributions.sort(key=lambda item: item["contribution"], reverse=True)
+            contributions.sort(key=lambda item: float(item["contribution"]), reverse=True)  # type: ignore[arg-type]
             rows.append(json.dumps(contributions[:3]))
         return pl.Series("top_signals", rows)
     except Exception:

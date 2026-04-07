@@ -97,14 +97,14 @@ def _flush_batch(batch: list[dict], db_path: str) -> int:
 
     con = duckdb.connect(db_path)
     try:
-        before = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0]
+        before = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0]  # type: ignore[index]
         con.execute("""
             INSERT OR IGNORE INTO ais_positions
                 (mmsi, timestamp, lat, lon, sog, cog, nav_status, ship_type)
             SELECT mmsi, timestamp, lat, lon, sog, cog, nav_status, ship_type
             FROM df
         """)
-        after = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0]
+        after = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0]  # type: ignore[index]
     finally:
         con.close()
 

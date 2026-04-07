@@ -94,14 +94,14 @@ def download_comtrade(
     df = pl.DataFrame(rows)  # noqa: F841 — referenced by DuckDB via `FROM df`
     con = duckdb.connect(db_path)
     try:
-        before = con.execute("SELECT count(*) FROM trade_flow").fetchone()[0]
+        before = con.execute("SELECT count(*) FROM trade_flow").fetchone()[0]  # type: ignore[index]
         con.execute("""
             INSERT OR IGNORE INTO trade_flow
                 (reporter, partner, hs_code, period, trade_value_usd, route_key)
             SELECT reporter, partner, hs_code, period, trade_value_usd, route_key
             FROM df
         """)
-        inserted = con.execute("SELECT count(*) FROM trade_flow").fetchone()[0] - before
+        inserted = con.execute("SELECT count(*) FROM trade_flow").fetchone()[0] - before  # type: ignore[index]
     finally:
         con.close()
     return inserted

@@ -587,7 +587,7 @@ def run_causal_model(
         regimes = SANCTION_REGIMES
         if regimes_path and os.path.exists(regimes_path):
             try:
-                import yaml
+                import yaml  # type: ignore[import-untyped]
 
                 with open(regimes_path) as f:
                     data = yaml.safe_load(f)
@@ -631,8 +631,8 @@ def run_causal_model(
 
     # Calibrate weight using all regimes together
     calibrated_w = calibrate_graph_weight(effects)
-    for e in effects:
-        e.calibrated_weight = calibrated_w
+    for eff in effects:
+        eff.calibrated_weight = calibrated_w
 
     return effects
 

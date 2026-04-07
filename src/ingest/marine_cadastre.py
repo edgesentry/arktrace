@@ -151,13 +151,13 @@ def load_csv_to_duckdb(
     try:
         pos_cols = ["mmsi", "timestamp", "lat", "lon", "sog", "cog", "nav_status", "ship_type"]
         pos_df = df.select([c for c in pos_cols if c in df.columns])  # noqa: F841 — referenced by DuckDB via `FROM pos_df`
-        before = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0]
+        before = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0]  # type: ignore[index]
         con.execute("""
             INSERT OR IGNORE INTO ais_positions
             SELECT mmsi, timestamp, lat, lon, sog, cog, nav_status, ship_type
             FROM pos_df
         """)
-        inserted = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0] - before
+        inserted = con.execute("SELECT count(*) FROM ais_positions").fetchone()[0] - before  # type: ignore[index]
 
         # Upsert vessel_meta from static fields where available
         meta_src_cols = ["mmsi", "vessel_name", "imo", "flag", "ship_type", "gross_tonnage"]

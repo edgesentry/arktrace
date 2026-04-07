@@ -138,14 +138,14 @@ def _flush_batch(con: duckdb.DuckDBPyConnection, batch: list[dict]) -> int:
             "list_source": pl.Utf8,
         },
     )
-    before = con.execute("SELECT count(*) FROM sanctions_entities").fetchone()[0]
+    before = con.execute("SELECT count(*) FROM sanctions_entities").fetchone()[0]  # type: ignore[index]
     con.execute("""
         INSERT OR IGNORE INTO sanctions_entities
             (entity_id, name, mmsi, imo, flag, type, list_source)
         SELECT entity_id, name, mmsi, imo, flag, type, list_source
         FROM df
     """)
-    return con.execute("SELECT count(*) FROM sanctions_entities").fetchone()[0] - before
+    return con.execute("SELECT count(*) FROM sanctions_entities").fetchone()[0] - before  # type: ignore[index]
 
 
 def load_jsonl_to_duckdb(

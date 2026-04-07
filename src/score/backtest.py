@@ -173,7 +173,7 @@ def _source_positive_coverage(
         }
 
         if hit is None:
-            missed.append(common)
+            missed.append(common)  # type: ignore[arg-type]
             continue
 
         rank, watch = hit
@@ -188,7 +188,7 @@ def _source_positive_coverage(
         )
 
     detected_in_top_k: list[dict[str, int | float]] = []
-    matched_ranks = [int(x["rank"]) for x in matched]
+    matched_ranks = [int(x["rank"]) for x in matched]  # type: ignore[call-overload]
     total = len(positives)
     for k in capacities:
         hits = sum(1 for r in matched_ranks if r <= k)
@@ -271,7 +271,7 @@ def _precision_at_k(df: pl.DataFrame, k: int) -> float:
     if df.is_empty():
         return 0.0
     head = df.head(min(k, df.height))
-    return float(head["y_true"].cast(pl.Float64).mean() or 0.0)
+    return float(head["y_true"].cast(pl.Float64).mean() or 0.0)  # type: ignore[arg-type]
 
 
 def _recall_at_k(df: pl.DataFrame, k: int, positive_count: int) -> float:
@@ -339,10 +339,10 @@ def _ops_thresholds(ranked: pl.DataFrame, capacities: list[int]) -> list[dict[st
             out.append({"review_capacity": k, "min_score": 1.0, "hit_rate": 0.0})
             continue
         top = ranked.head(k_eff)
-        min_score = float(top["confidence"].min() or 0.0)
+        min_score = float(top["confidence"].min() or 0.0)  # type: ignore[arg-type]
         known = top.filter(pl.col("y_true").is_not_null())
         hit_rate = (
-            float(known["y_true"].cast(pl.Float64).mean() or 0.0) if not known.is_empty() else 0.0
+            float(known["y_true"].cast(pl.Float64).mean() or 0.0) if not known.is_empty() else 0.0  # type: ignore[arg-type]
         )
         out.append(
             {

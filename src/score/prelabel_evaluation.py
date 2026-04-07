@@ -201,7 +201,7 @@ def _precision_at_k(df: pl.DataFrame, k: int) -> float:
     if df.is_empty() or k <= 0:
         return 0.0
     head = df.head(min(k, df.height))
-    return float(head["y_true"].cast(pl.Float64).mean() or 0.0)
+    return float(head["y_true"].cast(pl.Float64).mean() or 0.0)  # type: ignore[arg-type]
 
 
 def _recall_at_k(df: pl.DataFrame, k: int, positive_count: int) -> float:
@@ -380,10 +380,10 @@ def _ops_thresholds(df: pl.DataFrame, capacities: list[int]) -> list[dict[str, A
             out.append({"review_capacity": cap, "min_score": 1.0, "hit_rate": 0.0})
             continue
         top = df.head(min(cap, df.height))
-        min_score = float(top["confidence"].min() or 0.0)
+        min_score = float(top["confidence"].min() or 0.0)  # type: ignore[arg-type]
         known = top.filter(pl.col("y_true").is_not_null())
         hit_rate = (
-            float(known["y_true"].cast(pl.Float64).mean() or 0.0) if not known.is_empty() else 0.0
+            float(known["y_true"].cast(pl.Float64).mean() or 0.0) if not known.is_empty() else 0.0  # type: ignore[arg-type]
         )
         out.append(
             {
@@ -441,10 +441,10 @@ def run_prelabel_evaluation(
         )
     else:
         prelabels, n_leaked = load_prelabels_from_csv(
-            prelabels_csv,
+            prelabels_csv,  # type: ignore[arg-type]
             end_date=end_date,
             region=region,
-            min_confidence_tier=min_confidence_tier,  # type: ignore[arg-type]
+            min_confidence_tier=min_confidence_tier,
         )
 
     window = PrelabelWindow(

@@ -39,7 +39,7 @@ def _geo_to_h3(lat: float, lon: float, res: int) -> str:
     try:
         return h3.latlng_to_cell(lat, lon, res)  # h3-py >= 4
     except AttributeError:
-        return h3.geo_to_h3(lat, lon, res)  # type: ignore[attr-defined]
+        return h3.geo_to_h3(lat, lon, res)  # h3-py < 4 fallback
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

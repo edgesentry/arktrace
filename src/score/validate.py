@@ -74,7 +74,7 @@ def compute_validation_metrics(labeled_watchlist_df: pl.DataFrame) -> dict[str, 
     top_50 = ranked.head(min(50, ranked.height))
     top_200 = ranked.head(min(200, ranked.height))
 
-    precision_at_50 = float(top_50["is_ofac_listed"].cast(pl.Int8).mean() or 0.0)
+    precision_at_50 = float(top_50["is_ofac_listed"].cast(pl.Int8).mean() or 0.0)  # type: ignore[arg-type]
     recall_hits = int(top_200["is_ofac_listed"].cast(pl.Int8).sum())
     recall_at_200 = float(recall_hits / positive_count) if positive_count else 0.0
 

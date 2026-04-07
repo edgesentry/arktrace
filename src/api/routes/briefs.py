@@ -192,7 +192,7 @@ async def _generate_brief_tokens(vessel: dict) -> list[str]:
 
     llm = get_llm_client()
     tokens: list[str] = []
-    async for token in await llm.chat(system, user):
+    async for token in llm.chat(system, user):
         tokens.append(token)
     return tokens
 
