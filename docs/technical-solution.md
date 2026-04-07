@@ -1,5 +1,25 @@
 # Technical Solution
 
+## Primary Innovation
+
+arktrace is a **Causal Inference Engine for Shadow Fleet Prediction**. The primary technical contribution is the C3 Causal Sanction-Response model (`src/score/causal_sanction.py`) and the unknown-unknown detector (`src/analysis/causal.py`).
+
+**What this is not:** real-time vessel monitoring, anomaly detection on raw AIS data, conventional sanctions screening, or off-the-shelf behavioural analytics.
+
+**What this is:** A Difference-in-Differences (DiD) framework that tests, for each vessel, whether behavioural change was *causally triggered* by a specific sanction announcement — using HC3-robust OLS to distinguish genuine evasion responses from normal commercial variation. Vessels that pass the causal filter are then propagated through the ownership graph to surface connected unknown-unknown threats before any designation occurs.
+
+| Model component | Implementation | Role |
+|---|---|---|
+| C3 DiD causal model | `src/score/causal_sanction.py` | Tests causal response to sanction events; primary innovation |
+| Unknown-unknown detector | `src/analysis/causal.py` | Surfaces non-sanctioned vessels with evasion-consistent causal signatures |
+| Backtracking propagation | `scripts/run_backtracking.py` | Graph-walks ownership network from confirmed evaders to predict next designations |
+| AIS behaviour signals | `src/features/` | Input substrate for the causal model; not the primary discriminator |
+| Sanctions screening | `src/data/sanctions.py` | Input substrate; frames the event timeline for DiD windows |
+
+The 60–90 day pre-designation lead time (backtested — see [docs/scoring-model.md](scoring-model.md)) is a direct result of the causal model detecting evasion *responses* before those vessels accumulate enough evidence for a formal OFAC designation.
+
+---
+
 ## Tech Stack
 
 | Layer | Tool | Version | Rationale |
