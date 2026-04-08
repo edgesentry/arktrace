@@ -13,7 +13,9 @@ Provider selection via environment variables:
     LLM_API_KEY         API key — use "local" for self-hosted runtimes
     LLM_MODEL           model name / ID
     ANTHROPIC_API_KEY   required when LLM_PROVIDER=anthropic
-    LLAMACPP_MODEL_PATH path to GGUF model file (required when LLM_PROVIDER=llamacpp)
+    LLAMACPP_MODEL_PATH path to a local GGUF file  (takes priority)
+    LLAMACPP_MODEL_REPO HuggingFace repo ID to download from (e.g. unsloth/gemma-4-E4B-it-GGUF)
+    LLAMACPP_MODEL_FILE filename / glob within the repo   (default: *Q4_K_M*)
 """
 
 from __future__ import annotations
@@ -127,14 +129,15 @@ class AnthropicClient:
 
 
 class LlamaCppClient:
-    """Zero-dependency local GGUF inference via llama-cpp-python.
+    """Local GGUF inference via llama-cpp-python.
 
-    Requires:
-        pip install llama-cpp-python   (or: uv pip install llama-cpp-python)
-        LLAMACPP_MODEL_PATH=/path/to/model.gguf
+    Model resolution (first match wins):
+      1. LLAMACPP_MODEL_PATH  — path to a local .gguf file
+      2. LLAMACPP_MODEL_REPO  — HuggingFace repo ID; downloads on first use
+                                e.g. unsloth/gemma-4-E4B-it-GGUF
+         LLAMACPP_MODEL_FILE  — filename within the repo (glob ok, e.g. *Q4_K_M*)
 
-    Recommended model: Gemma 4B Instruct Q4_K_M (~2.5 GB, runs on CPU with 8 GB RAM).
-    Falls back gracefully if the model file is missing or the package is not installed.
+    Falls back gracefully if no model is configured or the package is not installed.
     """
 
     _instance: object = None  # lazy singleton — loaded once on first call
@@ -142,20 +145,36 @@ class LlamaCppClient:
     def _get_model(self) -> object | None:
         if LlamaCppClient._instance is not None:
             return LlamaCppClient._instance
-        model_path = os.getenv("LLAMACPP_MODEL_PATH", "")
-        if not model_path or not os.path.exists(model_path):
-            return None
         try:
             from llama_cpp import Llama  # type: ignore[import]
+        except ImportError:
+            return None
 
+        model_path = os.getenv("LLAMACPP_MODEL_PATH", "")
+        repo_id = os.getenv("LLAMACPP_MODEL_REPO", "")
+
+        if model_path and os.path.exists(model_path):
             LlamaCppClient._instance = Llama(
                 model_path=model_path,
                 n_ctx=4096,
                 n_threads=os.cpu_count() or 4,
                 verbose=False,
             )
-        except Exception:
+        elif repo_id:
+            filename = os.getenv("LLAMACPP_MODEL_FILE", "*Q4_K_M*")
+            try:
+                LlamaCppClient._instance = Llama.from_pretrained(
+                    repo_id=repo_id,
+                    filename=filename,
+                    n_ctx=4096,
+                    n_threads=os.cpu_count() or 4,
+                    verbose=False,
+                )
+            except Exception:
+                return None
+        else:
             return None
+
         return LlamaCppClient._instance
 
     async def chat(self, system: str, user: str) -> AsyncIterator[str]:

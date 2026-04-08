@@ -30,17 +30,28 @@ uv pip install llama-cpp-python
 CMAKE_ARGS="-DGGML_METAL=on" uv pip install llama-cpp-python --force-reinstall
 ```
 
-**2. Download a GGUF model** (~2.5 GB, Gemma 4B recommended):
+**2. Download a GGUF model:**
 ```bash
-pip install huggingface-hub
-huggingface-cli download bartowski/gemma-3-4b-it-GGUF \
-    gemma-3-4b-it-Q4_K_M.gguf --local-dir ~/models/
+# Gemma 4 4B Instruct (~2.5 GB) — recommended for 8 GB+ RAM:
+uv run python scripts/download_model.py gemma-4-e4b-it
+
+# Gemma 4 2B Instruct (~1.4 GB) — for 8 GB RAM with other apps running:
+uv run python scripts/download_model.py gemma-4-e2b-it
 ```
+
+Models are saved to `~/models/` by default. Override with `--dir /path/to/dir`.
 
 **3. Configure `.env`:**
 ```bash
 LLM_PROVIDER=llamacpp
-LLAMACPP_MODEL_PATH=/Users/yourname/models/gemma-3-4b-it-Q4_K_M.gguf
+LLAMACPP_MODEL_PATH=/Users/yourname/models/gemma-4-E4B-it-Q4_K_M.gguf
+```
+
+Alternatively, skip the download step and let the dashboard pull the model from HuggingFace on first request:
+```bash
+LLM_PROVIDER=llamacpp
+LLAMACPP_MODEL_REPO=unsloth/gemma-4-E4B-it-GGUF
+LLAMACPP_MODEL_FILE=*Q4_K_M*
 ```
 
 **4. Start the dashboard** — no other process needed:
@@ -48,15 +59,23 @@ LLAMACPP_MODEL_PATH=/Users/yourname/models/gemma-3-4b-it-Q4_K_M.gguf
 uv run uvicorn src.api.main:app --reload
 ```
 
+**Docker:** `docker compose up` handles everything — `model_init` downloads the model into a named volume on first run, then the dashboard starts automatically:
+```bash
+# Default: gemma-4-e4b-it
+docker compose up
+
+# Use the 2B model instead:
+MODEL_NAME=gemma-4-e2b-it docker compose up
+```
+
 The model loads once on first request. If `LLAMACPP_MODEL_PATH` is unset or the file is missing, the dashboard loads normally and brief generation returns a "LLM not configured" placeholder.
 
-**Memory guide:**
+**Model guide:**
 
-| Model | Quantisation | File size | RAM needed |
+| Short name | HuggingFace repo | Q4_K_M size | Min RAM |
 |---|---|---|---|
-| Gemma 4B Instruct | Q4_K_M | ~2.5 GB | 8 GB |
-| Gemma 4B Instruct | Q8_0 | ~4.3 GB | 8 GB |
-| Gemma 12B Instruct | Q4_K_M | ~7.5 GB | 16 GB |
+| `gemma-4-e4b-it` | `unsloth/gemma-4-E4B-it-GGUF` | ~2.5 GB | 8 GB |
+| `gemma-4-e2b-it` | `unsloth/gemma-4-E2B-it-GGUF` | ~1.4 GB | 8 GB |
 
 ---
 
