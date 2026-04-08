@@ -174,6 +174,7 @@ class LlamaCppClient:
         repo_id = os.getenv("LLAMACPP_MODEL_REPO", "")
 
         import logging as _logging
+
         _log = _logging.getLogger(__name__)
 
         _common_kwargs: dict = dict(
@@ -199,6 +200,7 @@ class LlamaCppClient:
         except Exception as e:
             import sys
             import traceback
+
             _log.error("Failed to initialise llama-cpp model: %s: %s", type(e).__name__, e)
             print(f"FAILED TO INIT LLAMACPP: {type(e).__name__}: {str(e)}", file=sys.stderr)
             traceback.print_exc()

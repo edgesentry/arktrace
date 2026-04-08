@@ -43,6 +43,7 @@ def main() -> None:
         if target_path.exists():
             backup = target_path.with_suffix(target_path.suffix + ".bak")
             import shutil
+
             shutil.copy2(target_path, backup)
             print(f"Backed up: {backup}")
 
