@@ -56,7 +56,9 @@ def get_conn() -> Generator[duckdb.DuckDBPyConnection, None, None]:
             except Exception:
                 # Best-effort close during connection rotation; keep behavior
                 # non-fatal, but record details for troubleshooting.
-                logger.debug("Ignoring DuckDB close failure while rotating connection", exc_info=True)
+                logger.debug(
+                    "Ignoring DuckDB close failure while rotating connection", exc_info=True
+                )
             _conn = None
             _conn_path = None
         if _conn is None:

@@ -99,7 +99,9 @@ def capture_sar_shap(page, out: Path) -> None:
     wait_for_dashboard(page)
     row = page.locator(f"tr.watchlist-row[data-mmsi='{SAR_MMSI}']")
     if row.count() == 0:
-        print(f"  WARNING: SAR vessel {SAR_MMSI} not found in watchlist — run seed_demo_sar.py first")
+        print(
+            f"  WARNING: SAR vessel {SAR_MMSI} not found in watchlist — run seed_demo_sar.py first"
+        )
         return
     row.click()
     page.wait_for_selector(".shap-table", timeout=10_000)

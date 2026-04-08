@@ -57,6 +57,7 @@ class _LogTqdm:
             print(f"  100%  {self.total / 1_048_576:.0f} MB — done", flush=True)
         return False
 
+
 # repo_id, filename (Q4_K_M quantisation — good quality/size balance)
 MODEL_CATALOG: dict[str, tuple[str, str]] = {
     "gemma-4-e4b-it": (
