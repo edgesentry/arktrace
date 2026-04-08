@@ -1,6 +1,6 @@
 # Feature Engineering
 
-The arktrace pipeline computes 19 features across four families for every vessel MMSI. All features are written to the `vessel_features` DuckDB table by `src/features/build_matrix.py`.
+The arktrace pipeline computes 21 features across five families for every vessel MMSI. All features are written to the `vessel_features` DuckDB table by `src/features/build_matrix.py`.
 
 ## Feature families
 
@@ -10,7 +10,8 @@ The arktrace pipeline computes 19 features across four families for every vessel
 | Identity Volatility | `identity.py` | 5 | Lance Graph + DuckDB |
 | Ownership Graph | `ownership_graph.py` | 5 | Lance Graph (Polars joins) |
 | Trade Flow Mismatch | `trade_mismatch.py` | 2 | DuckDB + Comtrade API |
-| **Total** | | **19** | |
+| EO Fusion | `eo_fusion.py` | 2 | DuckDB (GFW API / CSV) |
+| **Total** | | **21** | |
 
 ---
 
@@ -164,6 +165,28 @@ Binary flag indicating whether the vessel is a tanker operating on routes from s
 Difference (USD) between the declared cargo value from AIS voyage data and the UN Comtrade statistical estimate for the same route.
 
 **Shadow fleet signal:** Deliberate under-declaration of cargo value is used to reduce tax and duty exposure in destination countries. A large positive discrepancy (declared < estimated) is consistent with dark oil sales.
+
+---
+
+## EO Fusion features
+
+Source: `eo_detections` DuckDB table, populated from the [Global Fishing Watch Vessel Presence API](https://globalfishingwatch.org/our-apis/) or a local CSV fallback. Computed over a 30-day rolling window by `src/features/eo_fusion.py`.
+
+**Requires:** `GFW_API_TOKEN` in `.env` for live ingestion, or a local CSV via `--csv`. Pass `--skip-eo` to `build_matrix.py` to skip this family entirely (features default to 0).
+
+### `eo_dark_count_30d`
+
+Count of EO (Electro-Optical satellite imagery) vessel detections in the last 30 days that were **not** matched to an AIS broadcast within 0.1° / 120 min and were attributed to this vessel via AIS gap + 0.5° proximity.
+
+**Shadow fleet signal:** A vessel detected by satellite imagery that is simultaneously dark on AIS is operating without a transponder — the clearest observable indicator of intentional AIS manipulation. Each such unmatched detection during an AIS gap is a direct observation of dark-vessel behaviour.
+
+**Implementation:** GFW detections are matched to AIS broadcasts by position (≤ 0.1°) and time (≤ 120 min). Unmatched detections within 0.5° of a vessel's last known position during an AIS gap are attributed to that vessel. The 30-day count is written to `vessel_features`.
+
+### `eo_ais_mismatch_ratio`
+
+Fraction of all EO detections attributed to this vessel (matched + unmatched) that were unmatched (dark): `eo_dark_count_30d / total_attributed_detections`.
+
+**Shadow fleet signal:** A vessel that appears in satellite imagery only when it is also broadcasting on AIS has a ratio near 0 — consistent with compliant behaviour. A vessel with a ratio above 0.5 is dark during more than half its satellite observations, indicating a systematic pattern of AIS suppression rather than occasional equipment failure.
 
 ---
 

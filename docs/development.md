@@ -60,6 +60,8 @@ uv run python src/ingest/schema.py             # initialise DuckDB schema
 uv run python src/ingest/marine_cadastre.py    # load historical AIS
 uv run python src/ingest/sanctions.py          # load sanctions entities
 uv run python src/ingest/vessel_registry.py    # load Equasis + ITU MMSI → Lance Graph
+uv run python src/ingest/eo_gfw.py --bbox 95,1,110,6 --days 30  # EO detections (requires GFW_API_TOKEN in .env)
+uv run python src/ingest/eo_gfw.py --csv data/raw/eo_detections_sample.csv  # EO detections via local CSV (no token needed)
 uv run python src/features/ais_behavior.py     # compute AIS behavioral features
 uv run python src/features/identity.py         # identity volatility features (Lance Graph)
 uv run python src/features/ownership_graph.py  # Lance Graph ownership features
@@ -110,7 +112,7 @@ uv run pytest tests/
 - **DuckDB:** use parameterised queries; never interpolate user-supplied strings into SQL.
 - **Lance Graph:** read datasets via `src.graph.store.load_tables(db_path)`; write via `write_tables(db_path, tables)`. Graph features are implemented as Polars joins — no external graph server.
 - **Output:** all intermediate outputs are Parquet in `data/processed/`; no CSV outputs.
-- **Secrets:** API keys (aisstream.io, Equasis) go in `.env` (gitignored); read via `python-dotenv`.
+- **Secrets:** API keys (aisstream.io, Equasis, GFW) go in `.env` (gitignored); read via `python-dotenv`. For EO fusion without a GFW token, pass `--skip-eo` or use `--csv` with a local detections file.
 
 ## Out of Scope
 

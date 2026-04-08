@@ -401,6 +401,53 @@ run_sar_feature_smoke() {
   echo "     Check 'signals' array for unmatched_sar_detections_30d"
 }
 
+run_ingest_eo_csv() {
+  echo
+  echo "[13] Ingest EO Detections from CSV"
+
+  local csv_path
+  csv_path="$(prompt "Path to EO detections CSV" "data/raw/eo_detections_sample.csv")"
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
+  if ! run_cmd uv run python src/ingest/eo_gfw.py --csv "$csv_path" --db "$db_path"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+
+  if ! prompt_yes_no "Run feature matrix + scoring to verify in dashboard" "true"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python src/score/composite.py \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (composite scoring)"
+    return
+  fi
+
+  print_watchlist_summary "$watchlist_path"
+  echo
+  echo "── To verify in the dashboard ────────────────────────────────────────────────"
+  echo "  1. Start the app:  uv run uvicorn src.api.main:app --reload"
+  echo "  2. Open: http://localhost:8000 → Review tab → click a vessel"
+  echo "     Look for: 'Eo Dark Count 30D'  and  'Eo Ais Mismatch Ratio'"
+  echo "  3. API:  curl http://localhost:8000/api/vessels/<mmsi>/signals"
+}
+
 run_eo_feature_smoke() {
   echo
   echo "[12] EO Feature Smoke Test"
@@ -558,6 +605,11 @@ main_menu() {
     echo "     When: after changing EO ingestion or feature logic; verifying issue #119"
     echo "      Who: developer, data engineer"
     echo
+    echo "13) Ingest EO Detections from CSV"
+    echo "     What: load a local EO detections CSV into eo_detections table (no API token needed)"
+    echo "     When: testing EO fusion with sample or real CSV data before GFW API access"
+    echo "      Who: developer, data engineer"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -578,6 +630,7 @@ main_menu() {
       10) run_build_sanctions_demo ;;
       11) run_sar_feature_smoke ;;
       12) run_eo_feature_smoke ;;
+      13) run_ingest_eo_csv ;;
       q|quit|exit)
         echo "Bye"
         return
