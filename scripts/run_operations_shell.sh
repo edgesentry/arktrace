@@ -565,7 +565,8 @@ now        = datetime.now(UTC)
 gap_start  = now - timedelta(days=3)
 gap_end    = gap_start + timedelta(hours=gap_h)
 
-# Seed: two AIS pings bracketing the gap
+# Seed: target vessel (two AIS pings bracketing the gap) + normal background
+# vessels so Isolation Forest has enough samples to train (needs ≥4).
 con = duckdb.connect(db)
 con.execute("""
     INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type)
@@ -574,8 +575,35 @@ con.execute("""
       ('123456789', ?, ?, ?, 7.0, 0, 70)
 """, [gap_start - timedelta(hours=1), v_lat, v_lon,
       gap_end   + timedelta(hours=1), v_lat, v_lon])
+
+# Five normal vessels — frequent pings, no gaps, different positions
+normal_vessels = [
+    ("200000001", 1.3,  103.8, 70),
+    ("200000002", 1.4,  104.0, 70),
+    ("200000003", 1.2,  103.5, 80),
+    ("200000004", 1.5,  103.9, 70),
+    ("200000005", 1.1,  104.1, 80),
+]
+for mmsi, lat, lon, stype in normal_vessels:
+    for h in range(0, 72, 3):   # ping every 3 hours over 3 days — no gaps
+        ts = now - timedelta(hours=72 - h)
+        con.execute(
+            "INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type) "
+            "VALUES (?, ?, ?, ?, 8.0, 0, ?)",
+            [mmsi, ts, lat, lon, stype],
+        )
+
+con.execute("""
+    INSERT INTO vessel_meta (mmsi, flag, ship_type)
+    VALUES
+      ('123456789', 'IR', 70),
+      ('200000001', 'SG', 70), ('200000002', 'SG', 70),
+      ('200000003', 'SG', 80), ('200000004', 'SG', 70),
+      ('200000005', 'SG', 80)
+""")
 con.close()
 print(f"Seeded vessel 123456789 with {gap_h}h AIS gap at ({v_lat}, {v_lon})")
+print(f"Seeded 5 normal background vessels for Isolation Forest training")
 
 # Seed: three unmatched SAR detections during the gap (~11 km offset)
 detections = [
