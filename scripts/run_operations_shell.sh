@@ -54,23 +54,7 @@ run_cmd() {
 
 print_watchlist_summary() {
   local watchlist_path="$1"
-  WATCHLIST_PATH="$watchlist_path" uv run python - <<'PY'
-import os
-from pathlib import Path
-import polars as pl
-
-path = Path(os.environ["WATCHLIST_PATH"]).resolve()
-if not path.exists():
-    print(f"Result: watchlist not found at {path}")
-    raise SystemExit(0)
-
-df = pl.read_parquet(path)
-print(f"Result: watchlist rows = {df.height}")
-if df.height > 0 and {"mmsi", "confidence"}.issubset(set(df.columns)):
-    row = df.sort("confidence", descending=True).head(1).to_dicts()[0]
-    print(f"Top candidate: mmsi={row.get('mmsi')} confidence={row.get('confidence')}")
-print(f"Artifact: {path}")
-PY
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_watchlist_summary.py "$watchlist_path")
 }
 
 run_full_screening() {
@@ -137,27 +121,7 @@ run_review_feedback() {
   fi
 
   local abs_output="$PROJECT_ROOT/$output_path"
-  REPORT_PATH="$abs_output" uv run python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-path = Path(os.environ["REPORT_PATH"]).resolve()
-if not path.exists():
-    print("Result: SUCCESS, but output report was not found")
-    raise SystemExit(0)
-
-report = json.loads(path.read_text())
-summary = report.get("summary", {}) if isinstance(report, dict) else {}
-print("Result: SUCCESS")
-print(
-    "Summary: "
-    f"reviewed_vessel_count={summary.get('reviewed_vessel_count', 0)}, "
-    f"regions_evaluated={summary.get('regions_evaluated', 0)}, "
-    f"overall_drift_pass={summary.get('overall_drift_pass', True)}"
-)
-print(f"Artifact: {path}")
-PY
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_review_feedback_report.py --report "$abs_output")
 }
 
 run_backtesting_public_batch() {
@@ -179,26 +143,8 @@ run_backtesting_public_batch() {
 
   local summary_path="$PROJECT_ROOT/data/processed/backtest_public_integration_summary.json"
   local report_path="$PROJECT_ROOT/data/processed/backtest_report_public_integration.json"
-  SUMMARY_PATH="$summary_path" REPORT_PATH="$report_path" uv run python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-summary_path = Path(os.environ["SUMMARY_PATH"]).resolve()
-report_path = Path(os.environ["REPORT_PATH"]).resolve()
-if not summary_path.exists():
-    print("Result: SUCCESS, but summary report was not found")
-    raise SystemExit(0)
-
-summary = json.loads(summary_path.read_text())
-print("Result: SUCCESS")
-print(
-    "Summary: "
-    f"regions={summary.get('regions', [])}, "
-    f"total_known_cases={summary.get('total_known_cases', 0)}"
-)
-print(f"Artifacts: {summary_path}, {report_path}")
-PY
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_backtest_report.py \
+      --summary "$summary_path" --report "$report_path")
 }
 
 seed_demo_causal_effects() {
@@ -216,28 +162,7 @@ seed_demo_causal_effects() {
     echo "  MinIO not detected — writing to local data/processed/"
   fi
 
-  (cd "$PROJECT_ROOT" && uv run python - <<'PY'
-import polars as pl
-from src.storage.config import output_uri
-from src.storage.config import write_parquet as write_parquet_uri
-
-df = pl.DataFrame({
-    "regime":            ["OFAC Iran", "OFAC Russia", "UN DPRK"],
-    "n_treated":         [18, 32, 11],
-    "n_control":         [142, 180, 95],
-    "att_estimate":      [0.42, 0.15, -0.05],
-    "att_ci_lower":      [0.31, -0.02, -0.18],
-    "att_ci_upper":      [0.53, 0.32, 0.08],
-    "p_value":           [0.0003, 0.09, 0.45],
-    "is_significant":    [True, False, False],
-    "calibrated_weight": [0.55, 0.40, 0.40],
-})
-
-uri = output_uri("causal_effects.parquet")
-write_parquet_uri(df, uri)
-print(f"Artifact: {uri}")
-PY
-  )
+  (cd "$PROJECT_ROOT" && uv run python scripts/seed_demo_causal_effects.py)
 }
 
 run_demo_smoke() {
@@ -292,28 +217,7 @@ run_backtracking() {
   fi
 
   local abs_output="$PROJECT_ROOT/$output_path"
-  REPORT_PATH="$abs_output" uv run python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-path = Path(os.environ["REPORT_PATH"]).resolve()
-if not path.exists():
-    print("Result: SUCCESS, but report was not found")
-    raise SystemExit(0)
-
-report = json.loads(path.read_text())
-rc = report.get("regression_checks", {})
-status = "PASS" if rc.get("pass") else "FAIL"
-print("Result: SUCCESS")
-print(
-    f"Summary: confirmed={rc.get('confirmed_vessel_count', 0)}, "
-    f"rewound={rc.get('rewind_vessel_count', 0)}, "
-    f"propagated={rc.get('propagated_entity_count', 0)}, "
-    f"regression={status}"
-)
-print(f"Artifact: {path}")
-PY
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_backtracking_report.py --report "$abs_output")
 }
 
 run_prepare_sanctions_db() {
@@ -414,57 +318,7 @@ run_prelabel_evaluation() {
   fi
 
   local abs_output="$PROJECT_ROOT/$output_path"
-  REPORT_PATH="$abs_output" uv run python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-path = Path(os.environ["REPORT_PATH"]).resolve()
-if not path.exists():
-    print("Result: SUCCESS, but report was not found")
-    raise SystemExit(0)
-
-report = json.loads(path.read_text())
-result = report.get("result", {})
-m = result.get("metrics", {})
-leak = result.get("leakage_report", {})
-dis = result.get("disagreement", {})
-
-print("Result: SUCCESS")
-print(
-    f"Metrics: candidates={m.get('candidate_count', 0)}, "
-    f"labeled={m.get('labeled_count', 0)}, "
-    f"positives={m.get('positive_count', 0)}, "
-    f"precision@50={m.get('precision_at_50', 0.0):.3f}, "
-    f"recall@100={m.get('recall_at_100', 0.0):.3f}, "
-    f"auroc={m.get('auroc') or 'n/a'}"
-)
-print(
-    f"Leakage: {leak.get('labels_dropped', 0)} pre-labels dropped "
-    f"(evidence after cutoff date)"
-)
-print(
-    f"Disagreement: model-high/analyst-negative={dis.get('model_high_analyst_negative_count', 0)}, "
-    f"model-low/analyst-positive={dis.get('model_low_analyst_positive_count', 0)}"
-)
-
-tier_breakdown = result.get("confidence_tier_breakdown", {})
-if tier_breakdown:
-    print("Tier breakdown:")
-    for tier, stats in tier_breakdown.items():
-        print(
-            f"  {tier}: count={stats['count']}, "
-            f"positives={stats['positive_count']}, "
-            f"precision@50={stats['precision_at_50']:.3f}"
-        )
-
-if dis.get("model_low_analyst_positive"):
-    print("Model missed (low-score suspected-positives):")
-    for row in dis["model_low_analyst_positive"][:3]:
-        print(f"  mmsi={row.get('mmsi')} score={row.get('confidence', '?'):.3f} notes={row.get('evidence_notes', '')[:60]}")
-
-print(f"Artifact: {path}")
-PY
+  (cd "$PROJECT_ROOT" && uv run python scripts/print_prelabel_report.py --report "$abs_output")
 }
 
 run_causal_analysis() {
@@ -478,52 +332,16 @@ run_causal_analysis() {
 
   echo
   echo "── Drift Monitor ──────────────────────────────────────────────────────────────"
-  if ! run_cmd uv run python src/analysis/monitor.py --db "$db_path" --json \
-      2>/dev/null | uv run python - <<PY
-import json, sys
-data = json.load(sys.stdin)
-s = data["summary"]
-print(f"Result: ok={s['ok']}  warning={s['warning']}  critical={s['critical']}")
-for a in data["alerts"]:
-    icon = {"ok": "✓", "warning": "⚠", "critical": "✗"}.get(a["severity"], "?")
-    print(f"  {icon} [{a['severity'].upper()}] {a['check_name']}: {a['message']}")
-PY
-  then
+  if ! (cd "$PROJECT_ROOT" && uv run python src/analysis/monitor.py --db "$db_path" --json \
+      2>/dev/null | uv run python scripts/print_monitor_summary.py); then
     echo "Result: FAILED (drift monitor)"
     return
   fi
 
   echo
   echo "── Unknown-Unknown Causal Reasoner ────────────────────────────────────────────"
-  DB_PATH="$db_path" TOP_N="$top_n" uv run python - <<'PY'
-import os
-from src.analysis.causal import score_unknown_unknowns
-from src.score.causal_sanction import run_causal_model
-
-db = os.environ["DB_PATH"]
-top_n = int(os.environ.get("TOP_N", "5"))
-
-try:
-    effects = run_causal_model(db)
-    sig = sum(1 for e in effects if e.is_significant)
-    print(f"C3 causal effects: {len(effects)} regimes, {sig} significant")
-except Exception as exc:
-    print(f"C3 model unavailable ({exc}), running without causal evidence")
-    effects = []
-
-candidates = score_unknown_unknowns(db_path=db, causal_effects=effects or None)
-print(f"Unknown-unknown candidates: {len(candidates)}")
-if not candidates:
-    print("  (no vessels meet the minimum signal threshold)")
-else:
-    for c in candidates[:top_n]:
-        signals = ", ".join(s.feature for s in c.matching_signals)
-        print(f"  mmsi={c.mmsi}  score={c.causal_score:.3f}  signals=[{signals}]")
-    if candidates:
-        print()
-        print("Sample prompt context for top candidate:")
-        print(candidates[0].prompt_context())
-PY
+  (cd "$PROJECT_ROOT" && run_cmd uv run python scripts/run_causal_reasoner.py \
+      --db "$db_path" --top-n "$top_n")
 }
 
 run_sar_feature_smoke() {
