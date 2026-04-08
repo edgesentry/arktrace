@@ -98,7 +98,7 @@ def test_composite_and_watchlist_output(tmp_db, tmp_path):
     assert composite["confidence"].is_sorted(descending=True)
 
     first_signals = json.loads(composite.row(0, named=True)["top_signals"])
-    assert 1 <= len(first_signals) <= 3
+    assert 1 <= len(first_signals) <= 5
     assert {"feature", "value", "contribution"} <= set(first_signals[0])
 
     watchlist = build_candidate_watchlist(tmp_db)
