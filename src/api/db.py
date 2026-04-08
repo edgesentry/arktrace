@@ -11,6 +11,7 @@ synchronous DuckDB driver is not called from multiple threads simultaneously.
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from collections.abc import Generator
@@ -19,6 +20,8 @@ from contextlib import contextmanager
 import duckdb
 
 _DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
+
+logger = logging.getLogger(__name__)
 
 _conn: duckdb.DuckDBPyConnection | None = None
 _conn_path: str | None = None
@@ -51,7 +54,9 @@ def get_conn() -> Generator[duckdb.DuckDBPyConnection, None, None]:
             try:
                 _conn.close()
             except Exception:
-                pass
+                # Best-effort close during connection rotation; keep behavior
+                # non-fatal, but record details for troubleshooting.
+                logger.debug("Ignoring DuckDB close failure while rotating connection", exc_info=True)
             _conn = None
             _conn_path = None
         if _conn is None:
