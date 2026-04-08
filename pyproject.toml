@@ -45,6 +45,7 @@ markers = [
 [dependency-groups]
 dev = [
     "pip-licenses>=5.5.5",
+    "playwright>=1.49",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "ruff>=0.8",
