@@ -1,15 +1,21 @@
 """Shared LLM client — provider abstraction reused by C6 (analyst chat).
 
-Supports any OpenAI-compatible local runtime (MLX LM, LM Studio, Ollama, Jan,
-llamafile, Gemini) and Anthropic Claude via a thin httpx wrapper.
+Three providers:
+
+    llamacpp   — local GGUF inference via llama-cpp-python, no server required
+    anthropic  — Anthropic Claude API
+    openai     — any OpenAI-compatible remote API (OpenAI, Ollama, MLX, LM Studio, …)
 
 Provider selection via environment variables:
 
-    LLM_PROVIDER   mlx | lmstudio | ollama | gemini | anthropic  (default: mlx)
-    LLM_BASE_URL   base URL for OpenAI-compat providers
-    LLM_API_KEY    API key (use "local" for local runtimes)
-    LLM_MODEL      model name or ID
-    ANTHROPIC_API_KEY  required when LLM_PROVIDER=anthropic
+    LLM_PROVIDER        llamacpp | anthropic | openai  (default: llamacpp)
+    LLM_BASE_URL        base URL for openai provider  (default: http://localhost:8080/v1)
+    LLM_API_KEY         API key — use "local" for self-hosted runtimes
+    LLM_MODEL           model name / ID
+    ANTHROPIC_API_KEY   required when LLM_PROVIDER=anthropic
+    LLAMACPP_MODEL_PATH path to a local GGUF file  (takes priority)
+    LLAMACPP_MODEL_REPO HuggingFace repo ID to download from (e.g. unsloth/gemma-4-E4B-it-GGUF)
+    LLAMACPP_MODEL_FILE filename / glob within the repo   (default: *Q4_K_M*)
 """
 
 from __future__ import annotations
@@ -32,7 +38,7 @@ class LLMClient(Protocol):
 
 
 class OpenAICompatClient:
-    """OpenAI-compatible /v1/chat/completions — MLX LM, LM Studio, Ollama, Jan, llamafile, Gemini."""
+    """OpenAI-compatible /v1/chat/completions — works with OpenAI, Ollama, MLX LM, LM Studio, and any other compatible endpoint."""
 
     def __init__(self, base_url: str, api_key: str, model: str) -> None:
         self._base_url = base_url.rstrip("/")
@@ -122,16 +128,114 @@ class AnthropicClient:
                         continue
 
 
+class LlamaCppClient:
+    """Local GGUF inference via llama-cpp-python.
+
+    Model resolution (first match wins):
+      1. LLAMACPP_MODEL_PATH  — path to a local .gguf file
+      2. LLAMACPP_MODEL_REPO  — HuggingFace repo ID; downloads on first use
+                                e.g. unsloth/gemma-4-E4B-it-GGUF
+         LLAMACPP_MODEL_FILE  — filename within the repo (glob ok, e.g. *Q4_K_M*)
+
+    Falls back gracefully if no model is configured or the package is not installed.
+    """
+
+    _instance: object = None  # lazy singleton — loaded once on first call
+
+    def _get_model(self) -> object | None:
+        if LlamaCppClient._instance is not None:
+            return LlamaCppClient._instance
+        try:
+            from llama_cpp import Llama  # noqa: PLC0415
+        except ImportError:
+            return None
+
+        model_path = os.getenv("LLAMACPP_MODEL_PATH", "")
+        repo_id = os.getenv("LLAMACPP_MODEL_REPO", "")
+
+        try:
+            if model_path and os.path.exists(model_path):
+                LlamaCppClient._instance = Llama(
+                    model_path=model_path,
+                    n_ctx=4096,
+                    n_threads=os.cpu_count() or 4,
+                    verbose=False,
+                )
+            elif repo_id:
+                filename = os.getenv("LLAMACPP_MODEL_FILE", "*Q4_K_M*")
+                LlamaCppClient._instance = Llama.from_pretrained(
+                    repo_id=repo_id,
+                    filename=filename,
+                    n_ctx=4096,
+                    n_threads=os.cpu_count() or 4,
+                    verbose=False,
+                )
+            else:
+                return None
+        except Exception:
+            return None
+
+        return LlamaCppClient._instance
+
+    async def chat(self, system: str, user: str) -> AsyncIterator[str]:
+        async for token in self.stream_messages(system, [{"role": "user", "content": user}]):
+            yield token
+
+    async def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:
+        import asyncio
+
+        model = self._get_model()
+        if model is None:
+            yield "LLM not configured — set LLAMACPP_MODEL_PATH to a valid GGUF file."
+            return
+
+        full_messages = [{"role": "system", "content": system}] + messages
+
+        # llama-cpp-python is synchronous; run in thread to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        def _run() -> None:
+            try:
+                response = model.create_chat_completion(  # type: ignore[attr-defined]
+                    messages=full_messages,
+                    stream=True,
+                    max_tokens=512,
+                    temperature=0.2,
+                )
+                for chunk in response:
+                    delta = chunk["choices"][0]["delta"].get("content") or ""
+                    if delta:
+                        loop.call_soon_threadsafe(queue.put_nowait, delta)
+            except Exception as exc:
+                loop.call_soon_threadsafe(queue.put_nowait, f"[error: {exc}]")
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        import threading
+
+        threading.Thread(target=_run, daemon=True).start()
+
+        while True:
+            token = await queue.get()
+            if token is None:
+                break
+            yield token
+
+
 def get_llm_client() -> LLMClient:
     """Construct the appropriate LLMClient from environment variables."""
-    provider = os.getenv("LLM_PROVIDER", "mlx")
+    provider = os.getenv("LLM_PROVIDER", "llamacpp")
+    if provider == "llamacpp":
+        return LlamaCppClient()
     if provider == "anthropic":
         return AnthropicClient(
             api_key=os.getenv("LLM_API_KEY", os.getenv("ANTHROPIC_API_KEY", "")),
             model=os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001"),
         )
+    # "openai" or any unrecognised value — OpenAI-compatible remote API
     return OpenAICompatClient(
         base_url=os.getenv("LLM_BASE_URL", "http://localhost:8080/v1"),
         api_key=os.getenv("LLM_API_KEY", "local"),
-        model=os.getenv("LLM_MODEL", "mlx-community/Llama-3.2-3B-Instruct-4bit"),
+        model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
     )

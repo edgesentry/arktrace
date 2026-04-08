@@ -17,6 +17,20 @@ services:
       timeout: 5s
       retries: 5
 
+  # Downloads the GGUF model on first run; skips if already present in the volume.
+  # Set MODEL_NAME to: gemma-4-e4b-it (default, ~2.5 GB) or gemma-4-e2b-it (~1.4 GB)
+  # Set HF_TOKEN if the model repo is gated.
+  model_init:
+    build: .
+    container_name: mpol-model-init
+    volumes:
+      - models:/app/models
+    environment:
+      MODEL_NAME: ${MODEL_NAME:-gemma-4-e4b-it}
+      MODEL_DIR: /app/models
+      HF_TOKEN: ${HF_TOKEN:-}
+    command: ["uv", "run", "python", "scripts/download_model.py"]
+
   # Creates the default bucket on first run
   minio_init:
     image: minio/mc:latest
@@ -47,10 +61,16 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      # Local LLM — defaults to llamacpp with the model downloaded by model_init
+      LLM_PROVIDER: ${LLM_PROVIDER:-llamacpp}
+      LLAMACPP_MODEL_PATH: ${LLAMACPP_MODEL_PATH:-/app/models/gemma-4-E4B-it-Q4_K_M.gguf}
     volumes:
       - ./data:/app/data   # DuckDB working file stays local
+      - models:/app/models  # GGUF model downloaded by model_init
     depends_on:
       minio_init:
+        condition: service_completed_successfully
+      model_init:
         condition: service_completed_successfully
     command: ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]
 
@@ -81,3 +101,4 @@ services:
 
 volumes:
   minio_data:
+  models:  # GGUF model files — persists across rebuilds

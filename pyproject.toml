@@ -27,6 +27,10 @@ dev = [
 mlx = [
     "mlx-lm",
 ]
+llm = [
+    "llama-cpp-python>=0.3",
+    "huggingface-hub>=0.24",
+]
 
 [build-system]
 requires = ["hatchling"]

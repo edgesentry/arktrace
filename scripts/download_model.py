@@ -1,0 +1,97 @@
+"""Download a GGUF model from HuggingFace Hub.
+
+Supported model names:
+
+    gemma-4-e4b-it   unsloth/gemma-4-E4B-it-GGUF  (4B instruct, ~2.5 GB Q4_K_M)
+    gemma-4-e2b-it   unsloth/gemma-4-E2B-it-GGUF  (2B instruct, ~1.4 GB Q4_K_M)
+
+Usage:
+    # By short name (recommended):
+    uv run python scripts/download_model.py gemma-4-e4b-it
+
+    # Override output directory:
+    uv run python scripts/download_model.py gemma-4-e4b-it --dir ~/models
+
+    # Via environment variable (used by docker-compose model_init):
+    MODEL_NAME=gemma-4-e2b-it uv run python scripts/download_model.py
+
+Gated models require a HuggingFace token:
+    HF_TOKEN=hf_... uv run python scripts/download_model.py gemma-4-e4b-it
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+# repo_id, filename (Q4_K_M quantisation — good quality/size balance)
+MODEL_CATALOG: dict[str, tuple[str, str]] = {
+    "gemma-4-e4b-it": (
+        "unsloth/gemma-4-E4B-it-GGUF",
+        "gemma-4-E4B-it-Q4_K_M.gguf",
+    ),
+    "gemma-4-e2b-it": (
+        "unsloth/gemma-4-E2B-it-GGUF",
+        "gemma-4-E2B-it-Q4_K_M.gguf",
+    ),
+}
+
+DEFAULT_MODEL = "gemma-4-e4b-it"
+DEFAULT_DIR = Path.home() / "models"
+
+
+def download(model_name: str, output_dir: Path, token: str | None) -> Path:
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        print("ERROR: huggingface-hub not installed. Run: uv pip install huggingface-hub")
+        sys.exit(1)
+
+    if model_name not in MODEL_CATALOG:
+        known = ", ".join(MODEL_CATALOG)
+        print(f"ERROR: unknown model '{model_name}'. Known models: {known}")
+        sys.exit(1)
+
+    repo_id, filename = MODEL_CATALOG[model_name]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    dest = output_dir / filename
+
+    if dest.exists():
+        print(f"Already present: {dest}")
+        return dest
+
+    print(f"Downloading {filename} from {repo_id} …")
+    path = hf_hub_download(
+        repo_id=repo_id,
+        filename=filename,
+        local_dir=str(output_dir),
+        token=token or None,
+    )
+    print(f"Saved to {path}")
+    return Path(path)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Download a GGUF model from HuggingFace")
+    parser.add_argument(
+        "model",
+        nargs="?",
+        default=os.getenv("MODEL_NAME", DEFAULT_MODEL),
+        help=f"Model name (default: {DEFAULT_MODEL}). Known: {', '.join(MODEL_CATALOG)}",
+    )
+    parser.add_argument(
+        "--dir",
+        type=Path,
+        default=Path(os.getenv("MODEL_DIR", str(DEFAULT_DIR))),
+        help="Output directory (default: ~/models or $MODEL_DIR)",
+    )
+    args = parser.parse_args()
+
+    token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+    download(args.model, args.dir, token)
+
+
+if __name__ == "__main__":
+    main()
