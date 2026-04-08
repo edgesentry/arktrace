@@ -21,7 +21,6 @@ Outputs are written to _outputs/screenshots/:
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -38,9 +37,14 @@ def wait_for_dashboard(page) -> None:
     page.wait_for_selector("#watchlist-tbody tr.watchlist-row", timeout=15_000)
 
 
+def goto(page, url: str) -> None:
+    """Navigate and wait for DOM — avoids networkidle timeout from SSE/WebSocket."""
+    page.goto(url, wait_until="domcontentloaded")
+
+
 def capture_map_watchlist(page, out: Path) -> None:
     """Screenshot 2: full-page map + watchlist (default landing view)."""
-    page.goto(BASE_URL, wait_until="networkidle")
+    goto(page, BASE_URL)
     wait_for_dashboard(page)
     # Let map tiles settle
     time.sleep(2)
@@ -50,7 +54,7 @@ def capture_map_watchlist(page, out: Path) -> None:
 
 def capture_shap_breakdown(page, out: Path) -> None:
     """Screenshot 1: SHAP top-5 breakdown in the review panel."""
-    page.goto(BASE_URL, wait_until="networkidle")
+    goto(page, BASE_URL)
     wait_for_dashboard(page)
     # Click the top watchlist row to open the review panel
     page.locator("#watchlist-tbody tr.watchlist-row").first.click()
@@ -64,7 +68,7 @@ def capture_shap_breakdown(page, out: Path) -> None:
 
 def capture_causal_badge(page, out: Path) -> None:
     """Screenshot 3: ATT causal badge (+ 95% CI) in the review panel."""
-    page.goto(BASE_URL, wait_until="networkidle")
+    goto(page, BASE_URL)
     wait_for_dashboard(page)
     page.locator("#watchlist-tbody tr.watchlist-row").first.click()
     # Wait for causal badge or att-badge element
@@ -81,7 +85,7 @@ def capture_causal_badge(page, out: Path) -> None:
 
 def capture_dispatch_brief(page, out: Path) -> None:
     """Screenshot 4: patrol dispatch brief modal."""
-    page.goto(BASE_URL, wait_until="networkidle")
+    goto(page, BASE_URL)
     wait_for_dashboard(page)
     page.locator("#watchlist-tbody tr.watchlist-row").first.click()
     # Enable and click the Generate Brief button
