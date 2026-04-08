@@ -201,6 +201,45 @@ print(f"Artifacts: {summary_path}, {report_path}")
 PY
 }
 
+seed_demo_causal_effects() {
+  # Auto-detect MinIO running at localhost:9000 and configure S3 vars so
+  # write_parquet_uri sends the file to MinIO (where the dashboard reads from)
+  # rather than the local filesystem.
+  if curl -sf http://localhost:9000/minio/health/live >/dev/null 2>&1; then
+    export S3_BUCKET="${S3_BUCKET:-arktrace}"
+    export S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}"
+    export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-minioadmin}"
+    export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-minioadmin}"
+    export AWS_REGION="${AWS_REGION:-us-east-1}"
+    echo "  MinIO detected at localhost:9000 — writing to s3://$S3_BUCKET/processed/"
+  else
+    echo "  MinIO not detected — writing to local data/processed/"
+  fi
+
+  (cd "$PROJECT_ROOT" && uv run python - <<'PY'
+import polars as pl
+from src.storage.config import output_uri
+from src.storage.config import write_parquet as write_parquet_uri
+
+df = pl.DataFrame({
+    "regime":            ["OFAC Iran", "OFAC Russia", "UN DPRK"],
+    "n_treated":         [18, 32, 11],
+    "n_control":         [142, 180, 95],
+    "att_estimate":      [0.42, 0.15, -0.05],
+    "att_ci_lower":      [0.31, -0.02, -0.18],
+    "att_ci_upper":      [0.53, 0.32, 0.08],
+    "p_value":           [0.0003, 0.09, 0.45],
+    "is_significant":    [True, False, False],
+    "calibrated_weight": [0.55, 0.40, 0.40],
+})
+
+uri = output_uri("causal_effects.parquet")
+write_parquet_uri(df, uri)
+print(f"Artifact: {uri}")
+PY
+  )
+}
+
 run_demo_smoke() {
   echo
   echo "[5] Demo/Smoke"
@@ -217,6 +256,12 @@ run_demo_smoke() {
 
   echo "Result: SUCCESS"
   print_watchlist_summary "$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+
+  echo
+  echo "── Seeding demo causal_effects.parquet (ATT badge in review panel) ────────────"
+  if ! (cd "$PROJECT_ROOT" && seed_demo_causal_effects); then
+    echo "Warning: causal effects seeding failed — ATT badge will not appear in dashboard"
+  fi
 }
 
 run_backtracking() {
@@ -532,8 +577,9 @@ main_menu() {
     echo
     echo "── DEVELOPMENT / LOCAL TESTING ─────────────────────────────────────────────────"
     echo "5) Demo/Smoke"
-    echo "     What: load a fixed demo watchlist so the dashboard has realistic data without"
-    echo "           running a full pipeline"
+    echo "     What: load a fixed demo watchlist + seed dummy causal_effects.parquet so the"
+    echo "           dashboard has realistic data without running a full pipeline"
+    echo "           (populates watchlist, ATT causal badge, SHAP signals)"
     echo "     When: preparing a demo, smoke-testing UI changes, or onboarding a new dev"
     echo "      Who: developer, product"
     echo

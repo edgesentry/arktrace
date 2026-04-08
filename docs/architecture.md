@@ -231,6 +231,15 @@ uv run python src/score/composite.py --w-graph <calibrated_value>
 
 Outputs: `data/processed/causal_effects.parquet` — regime, n_treated, n_control, ATT estimate, 95% CI, p-value, is_significant, calibrated_weight.
 
+**Dashboard exposure:** the file is served via `GET /api/causal-effects` and rendered in the vessel review panel as per-regime ATT badges:
+
+```
+⚡ OFAC Iran    ATT = +0.42   95% CI [+0.31, +0.53]   p < 0.001
+⚡ OFAC Russia  ATT = +0.15   95% CI [-0.02, +0.32]   p = 0.09   n.s.
+```
+
+Significant regimes (p < 0.05) are highlighted in indigo; non-significant regimes are rendered in grey. Returns `{"available": false}` if the file does not yet exist (e.g. before the first pipeline run).
+
 ### Composite Score
 
 ```

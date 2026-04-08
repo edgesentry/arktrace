@@ -140,3 +140,70 @@ def test_no_watchlist_returns_empty(tmp_path, monkeypatch):
 
     r = c.get("/api/metrics")
     assert r.json()["available"] is False
+
+
+# ── /api/causal-effects ────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def causal_effects_parquet(tmp_path):
+    """Write a minimal causal_effects.parquet and return its path."""
+    df = pl.DataFrame(
+        {
+            "regime": ["OFAC Iran", "OFAC Russia", "UN DPRK"],
+            "n_treated": [18, 32, 11],
+            "n_control": [142, 180, 95],
+            "att_estimate": [0.42, 0.15, -0.05],
+            "att_ci_lower": [0.31, -0.02, -0.18],
+            "att_ci_upper": [0.53, 0.32, 0.08],
+            "p_value": [0.0003, 0.09, 0.45],
+            "is_significant": [True, False, False],
+            "calibrated_weight": [0.55, 0.40, 0.40],
+        }
+    )
+    path = str(tmp_path / "causal_effects.parquet")
+    df.write_parquet(path)
+    return path
+
+
+@pytest.fixture
+def client_with_causal(watchlist_parquet, validation_json, causal_effects_parquet, monkeypatch):
+    monkeypatch.setenv("WATCHLIST_OUTPUT_PATH", watchlist_parquet)
+    monkeypatch.setenv("VALIDATION_METRICS_PATH", validation_json)
+    monkeypatch.setenv("CAUSAL_EFFECTS_PATH", causal_effects_parquet)
+
+    import importlib
+
+    import src.api.routes.alerts as alerts_mod
+    import src.api.routes.vessels as vessels_mod
+
+    importlib.reload(vessels_mod)
+    importlib.reload(alerts_mod)
+
+    from src.api.main import create_app
+
+    return TestClient(create_app())
+
+
+def test_causal_effects_available(client_with_causal):
+    r = client_with_causal.get("/api/causal-effects")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert len(body["regimes"]) == 3
+    regimes = {re["regime"]: re for re in body["regimes"]}
+    assert regimes["OFAC Iran"]["is_significant"] is True
+    assert abs(regimes["OFAC Iran"]["att_estimate"] - 0.42) < 0.001
+    assert abs(regimes["OFAC Iran"]["att_ci_lower"] - 0.31) < 0.001
+    assert abs(regimes["OFAC Iran"]["att_ci_upper"] - 0.53) < 0.001
+    assert regimes["OFAC Russia"]["is_significant"] is False
+    assert regimes["UN DPRK"]["is_significant"] is False
+
+
+def test_causal_effects_unavailable(client):
+    # client fixture has no CAUSAL_EFFECTS_PATH set → file won't exist
+    r = client.get("/api/causal-effects")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
+    assert body["regimes"] == []
