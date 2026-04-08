@@ -56,6 +56,14 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
   set +o allexport
 fi
 
+# ── Resolve python packages ────────────────────────────────────────────────────
+if [[ "${LLM_PROVIDER:-llamacpp}" == "llamacpp" ]]; then
+  if ! uv run python -c "import llama_cpp" 2>/dev/null; then
+    echo "⬇️  llama-cpp-python not found. Compiling with Apple Metal support…"
+    CMAKE_ARGS="-DGGML_METAL=on" uv pip install llama-cpp-python --force-reinstall
+  fi
+fi
+
 # ── Resolve model path if not set ────────────────────────────────────────────
 if [[ -z "${LLAMACPP_MODEL_PATH:-}" ]]; then
   DEFAULT_MODEL="${HOME}/.cache/arktrace/models/gemma-4-E4B-it-Q4_K_M.gguf"
