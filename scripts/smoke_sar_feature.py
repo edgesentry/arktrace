@@ -16,9 +16,9 @@ from datetime import UTC, datetime, timedelta
 
 import duckdb
 
-from src.ingest.schema import init_schema
-from src.ingest.sar import ingest_sar_records
 from src.features.sar_detections import compute_unmatched_sar_detections
+from src.ingest.sar import ingest_sar_records
+from src.ingest.schema import init_schema
 
 DEFAULT_DB = "data/processed/mpol.duckdb"
 TARGET_MMSI = "123456789"
@@ -40,12 +40,20 @@ def main(db: str, gap_hours: float, vessel_lat: float, vessel_lon: float) -> Non
         VALUES ('123456789', ?, ?, ?, 8.0, 0, 70),
                ('123456789', ?, ?, ?, 7.0, 0, 70)
         """,
-        [gap_start - timedelta(hours=1), vessel_lat, vessel_lon,
-         gap_end + timedelta(hours=1), vessel_lat, vessel_lon],
+        [
+            gap_start - timedelta(hours=1),
+            vessel_lat,
+            vessel_lon,
+            gap_end + timedelta(hours=1),
+            vessel_lat,
+            vessel_lon,
+        ],
     )
     for mmsi, lat, lon, stype in [
-        ("200000001", 1.3, 103.8, 70), ("200000002", 1.4, 104.0, 70),
-        ("200000003", 1.2, 103.5, 80), ("200000004", 1.5, 103.9, 70),
+        ("200000001", 1.3, 103.8, 70),
+        ("200000002", 1.4, 104.0, 70),
+        ("200000003", 1.2, 103.5, 80),
+        ("200000004", 1.5, 103.9, 70),
         ("200000005", 1.1, 104.1, 80),
     ]:
         for h in range(0, 72, 3):
@@ -67,12 +75,27 @@ def main(db: str, gap_hours: float, vessel_lat: float, vessel_lon: float) -> Non
 
     ingest_sar_records(
         [
-            {"detection_id": "smoke-d1", "detected_at": gap_start + timedelta(hours=2),
-             "lat": vessel_lat + 0.1, "lon": vessel_lon, "source_scene": "S1A_IW_GRDH_smoke_1"},
-            {"detection_id": "smoke-d2", "detected_at": gap_start + timedelta(hours=gap_hours / 2),
-             "lat": vessel_lat + 0.1, "lon": vessel_lon + 0.1, "source_scene": "S1A_IW_GRDH_smoke_2"},
-            {"detection_id": "smoke-d3", "detected_at": gap_end - timedelta(hours=2),
-             "lat": vessel_lat, "lon": vessel_lon + 0.1, "source_scene": "S1A_IW_GRDH_smoke_3"},
+            {
+                "detection_id": "smoke-d1",
+                "detected_at": gap_start + timedelta(hours=2),
+                "lat": vessel_lat + 0.1,
+                "lon": vessel_lon,
+                "source_scene": "S1A_IW_GRDH_smoke_1",
+            },
+            {
+                "detection_id": "smoke-d2",
+                "detected_at": gap_start + timedelta(hours=gap_hours / 2),
+                "lat": vessel_lat + 0.1,
+                "lon": vessel_lon + 0.1,
+                "source_scene": "S1A_IW_GRDH_smoke_2",
+            },
+            {
+                "detection_id": "smoke-d3",
+                "detected_at": gap_end - timedelta(hours=2),
+                "lat": vessel_lat,
+                "lon": vessel_lon + 0.1,
+                "source_scene": "S1A_IW_GRDH_smoke_3",
+            },
         ],
         db_path=db,
     )

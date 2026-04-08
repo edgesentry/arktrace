@@ -16,9 +16,9 @@ from datetime import UTC, datetime, timedelta
 
 import duckdb
 
-from src.ingest.schema import init_schema
-from src.ingest.eo_gfw import ingest_eo_records
 from src.features.eo_fusion import compute_eo_features
+from src.ingest.eo_gfw import ingest_eo_records
+from src.ingest.schema import init_schema
 
 DEFAULT_DB = "data/processed/mpol.duckdb"
 TARGET_MMSI = "123456789"
@@ -40,12 +40,20 @@ def main(db: str, gap_hours: float, vessel_lat: float, vessel_lon: float) -> Non
         VALUES ('123456789', ?, ?, ?, 8.0, 0, 70),
                ('123456789', ?, ?, ?, 7.0, 0, 70)
         """,
-        [gap_start - timedelta(hours=1), vessel_lat, vessel_lon,
-         gap_end + timedelta(hours=1), vessel_lat, vessel_lon],
+        [
+            gap_start - timedelta(hours=1),
+            vessel_lat,
+            vessel_lon,
+            gap_end + timedelta(hours=1),
+            vessel_lat,
+            vessel_lon,
+        ],
     )
     for mmsi, lat, lon, stype in [
-        ("200000001", 1.3, 103.8, 70), ("200000002", 1.4, 104.0, 70),
-        ("200000003", 1.2, 103.5, 80), ("200000004", 1.5, 103.9, 70),
+        ("200000001", 1.3, 103.8, 70),
+        ("200000002", 1.4, 104.0, 70),
+        ("200000003", 1.2, 103.5, 80),
+        ("200000004", 1.5, 103.9, 70),
         ("200000005", 1.1, 104.1, 80),
     ]:
         for h in range(0, 72, 3):
@@ -67,23 +75,39 @@ def main(db: str, gap_hours: float, vessel_lat: float, vessel_lon: float) -> Non
 
     ingest_eo_records(
         [
-            {"detection_id": "eo-dark-1",
-             "detected_at": gap_start + timedelta(hours=3),
-             "lat": vessel_lat + 0.05, "lon": vessel_lon + 0.05, "source": "gfw"},
-            {"detection_id": "eo-dark-2",
-             "detected_at": gap_start + timedelta(hours=gap_hours / 2),
-             "lat": vessel_lat + 0.08, "lon": vessel_lon, "source": "gfw"},
-            {"detection_id": "eo-matched",
-             "detected_at": gap_start - timedelta(minutes=30),
-             "lat": vessel_lat + 0.02, "lon": vessel_lon + 0.02, "source": "gfw"},
+            {
+                "detection_id": "eo-dark-1",
+                "detected_at": gap_start + timedelta(hours=3),
+                "lat": vessel_lat + 0.05,
+                "lon": vessel_lon + 0.05,
+                "source": "gfw",
+            },
+            {
+                "detection_id": "eo-dark-2",
+                "detected_at": gap_start + timedelta(hours=gap_hours / 2),
+                "lat": vessel_lat + 0.08,
+                "lon": vessel_lon,
+                "source": "gfw",
+            },
+            {
+                "detection_id": "eo-matched",
+                "detected_at": gap_start - timedelta(minutes=30),
+                "lat": vessel_lat + 0.02,
+                "lon": vessel_lon + 0.02,
+                "source": "gfw",
+            },
         ],
         db_path=db,
     )
     print("Seeded 2 dark + 1 matched EO detections")
 
     result = compute_eo_features(
-        db, window_days=30, match_radius_deg=0.1,
-        match_window_minutes=120, gap_threshold_h=6.0, attribution_radius_deg=0.5,
+        db,
+        window_days=30,
+        match_radius_deg=0.1,
+        match_window_minutes=120,
+        gap_threshold_h=6.0,
+        attribution_radius_deg=0.5,
     )
     if result.is_empty():
         print("FAILED — no EO features computed")
@@ -96,7 +120,9 @@ def main(db: str, gap_hours: float, vessel_lat: float, vessel_lon: float) -> Non
 
     dark = row["eo_dark_count_30d"][0]
     ratio = row["eo_ais_mismatch_ratio"][0]
-    print(f"SUCCESS — mmsi={TARGET_MMSI}  eo_dark_count_30d={dark}  eo_ais_mismatch_ratio={ratio:.2f}")
+    print(
+        f"SUCCESS — mmsi={TARGET_MMSI}  eo_dark_count_30d={dark}  eo_ais_mismatch_ratio={ratio:.2f}"
+    )
     print(result)
 
 
