@@ -31,7 +31,49 @@ The recommended model for shadow fleet analysis is **Qwen 2.5 Coder 7B (Instruct
 
 ---
 
-## Setup
+## Option A — llama-cpp-python (zero external server, any hardware)
+
+The simplest setup: no separate server process, no GPU required. Runs on any laptop with 8 GB RAM via CPU inference.
+
+**1. Install the package:**
+```bash
+uv pip install llama-cpp-python
+# Apple Silicon — build with Metal for faster inference:
+CMAKE_ARGS="-DGGML_METAL=on" uv pip install llama-cpp-python --force-reinstall
+```
+
+**2. Download a GGUF model** (Gemma 4B Instruct Q4_K_M recommended, ~2.5 GB):
+```bash
+# Using huggingface-hub CLI:
+pip install huggingface-hub
+huggingface-cli download bartowski/gemma-3-4b-it-GGUF \
+    gemma-3-4b-it-Q4_K_M.gguf --local-dir ~/models/
+```
+
+**3. Configure `.env`:**
+```bash
+LLM_PROVIDER=llamacpp
+LLAMACPP_MODEL_PATH=/Users/yourname/models/gemma-3-4b-it-Q4_K_M.gguf
+```
+
+**4. Start the dashboard** — no other process needed:
+```bash
+uv run uvicorn src.api.main:app --reload
+```
+
+The model is loaded once on first request and reused for subsequent briefs. If `LLAMACPP_MODEL_PATH` is unset or the file is missing, the dashboard loads normally and brief generation returns a "LLM not configured" placeholder.
+
+**Memory guide:**
+
+| Model | Quantisation | File size | RAM needed |
+|---|---|---|---|
+| Gemma 4B Instruct | Q4_K_M | ~2.5 GB | 8 GB |
+| Gemma 4B Instruct | Q8_0 | ~4.3 GB | 8 GB |
+| Gemma 12B Instruct | Q4_K_M | ~7.5 GB | 16 GB |
+
+---
+
+## Option B — mlx-lm proxy (Apple Silicon, shared with Claude Code)
 
 We use the **`mlx-lm-coding-agent-proxy`** to run a local LLM that is compatible with both OpenAI and Anthropic API standards. This allows `arktrace` and `Claude Code` to share the same model instance in memory.
 
@@ -55,8 +97,9 @@ We use the **`mlx-lm-coding-agent-proxy`** to run a local LLM that is compatible
 ## Hardware & Performance Notes
 
 ### Memory Requirements
+- **4B models (Gemma 4B Q4_K_M via llama-cpp-python):** ~2.5 GB model + ~1 GB overhead. Works on 8 GB machines.
 - **7B models (Qwen 2.5 7B):** ~8 GB RAM. Recommended for 16 GB+ machines.
 
 ### Processor Support
-- **Apple Silicon (M1/M2/M3/M4):** Native support via MLX for maximum performance.
-- **Intel:** Not supported by this specific MLX proxy (use Ollama directly if on Intel).
+- **Apple Silicon (M1/M2/M3/M4):** Option A (llama-cpp-python with Metal) or Option B (MLX proxy). Metal build of llama-cpp-python gives near-MLX performance.
+- **Intel Mac / Linux CPU:** Option A only (llama-cpp-python CPU inference). Option B (MLX) is Apple Silicon only.

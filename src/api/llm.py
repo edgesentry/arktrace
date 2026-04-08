@@ -1,15 +1,18 @@
 """Shared LLM client — provider abstraction reused by C6 (analyst chat).
 
 Supports any OpenAI-compatible local runtime (MLX LM, LM Studio, Ollama, Jan,
-llamafile, Gemini) and Anthropic Claude via a thin httpx wrapper.
+llamafile, Gemini), Anthropic Claude, and llama-cpp-python for zero-dependency
+local GGUF inference.
 
 Provider selection via environment variables:
 
-    LLM_PROVIDER   mlx | lmstudio | ollama | gemini | anthropic  (default: mlx)
-    LLM_BASE_URL   base URL for OpenAI-compat providers
-    LLM_API_KEY    API key (use "local" for local runtimes)
-    LLM_MODEL      model name or ID
-    ANTHROPIC_API_KEY  required when LLM_PROVIDER=anthropic
+    LLM_PROVIDER        mlx | lmstudio | ollama | gemini | anthropic | llamacpp
+                        (default: mlx)
+    LLM_BASE_URL        base URL for OpenAI-compat providers
+    LLM_API_KEY         API key (use "local" for local runtimes)
+    LLM_MODEL           model name or ID
+    ANTHROPIC_API_KEY   required when LLM_PROVIDER=anthropic
+    LLAMACPP_MODEL_PATH path to GGUF model file (required when LLM_PROVIDER=llamacpp)
 """
 
 from __future__ import annotations
@@ -122,6 +125,84 @@ class AnthropicClient:
                         continue
 
 
+class LlamaCppClient:
+    """Zero-dependency local GGUF inference via llama-cpp-python.
+
+    Requires:
+        pip install llama-cpp-python   (or: uv pip install llama-cpp-python)
+        LLAMACPP_MODEL_PATH=/path/to/model.gguf
+
+    Recommended model: Gemma 4B Instruct Q4_K_M (~2.5 GB, runs on CPU with 8 GB RAM).
+    Falls back gracefully if the model file is missing or the package is not installed.
+    """
+
+    _instance: object = None  # lazy singleton — loaded once on first call
+
+    def _get_model(self) -> object | None:
+        if LlamaCppClient._instance is not None:
+            return LlamaCppClient._instance
+        model_path = os.getenv("LLAMACPP_MODEL_PATH", "")
+        if not model_path or not os.path.exists(model_path):
+            return None
+        try:
+            from llama_cpp import Llama  # type: ignore[import]
+
+            LlamaCppClient._instance = Llama(
+                model_path=model_path,
+                n_ctx=4096,
+                n_threads=os.cpu_count() or 4,
+                verbose=False,
+            )
+        except Exception:
+            return None
+        return LlamaCppClient._instance
+
+    async def chat(self, system: str, user: str) -> AsyncIterator[str]:
+        async for token in self.stream_messages(system, [{"role": "user", "content": user}]):
+            yield token
+
+    async def stream_messages(self, system: str, messages: list[dict]) -> AsyncIterator[str]:
+        import asyncio
+
+        model = self._get_model()
+        if model is None:
+            yield "LLM not configured — set LLAMACPP_MODEL_PATH to a valid GGUF file."
+            return
+
+        full_messages = [{"role": "system", "content": system}] + messages
+
+        # llama-cpp-python is synchronous; run in thread to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        def _run() -> None:
+            try:
+                response = model.create_chat_completion(  # type: ignore[union-attr]
+                    messages=full_messages,
+                    stream=True,
+                    max_tokens=512,
+                    temperature=0.2,
+                )
+                for chunk in response:
+                    delta = chunk["choices"][0]["delta"].get("content") or ""
+                    if delta:
+                        loop.call_soon_threadsafe(queue.put_nowait, delta)
+            except Exception as exc:
+                loop.call_soon_threadsafe(queue.put_nowait, f"[error: {exc}]")
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        import threading
+
+        threading.Thread(target=_run, daemon=True).start()
+
+        while True:
+            token = await queue.get()
+            if token is None:
+                break
+            yield token
+
+
 def get_llm_client() -> LLMClient:
     """Construct the appropriate LLMClient from environment variables."""
     provider = os.getenv("LLM_PROVIDER", "mlx")
@@ -130,6 +211,8 @@ def get_llm_client() -> LLMClient:
             api_key=os.getenv("LLM_API_KEY", os.getenv("ANTHROPIC_API_KEY", "")),
             model=os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001"),
         )
+    if provider == "llamacpp":
+        return LlamaCppClient()
     return OpenAICompatClient(
         base_url=os.getenv("LLM_BASE_URL", "http://localhost:8080/v1"),
         api_key=os.getenv("LLM_API_KEY", "local"),
