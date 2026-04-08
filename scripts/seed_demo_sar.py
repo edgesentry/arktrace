@@ -48,7 +48,7 @@ def main() -> None:
 
     updated.write_parquet(WATCHLIST_PATH)
     print(f"Injected SAR signals for MMSI {SAR_MMSI} into {WATCHLIST_PATH}")
-    print(f"  Top signal: unmatched_sar_detections_30d = 3 (contribution 0.24)")
+    print("  Top signal: unmatched_sar_detections_30d = 3 (contribution 0.24)")
 
 
 if __name__ == "__main__":

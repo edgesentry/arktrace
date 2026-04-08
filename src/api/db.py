@@ -13,14 +13,15 @@ from __future__ import annotations
 
 import os
 import threading
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 import duckdb
 
 _DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
 
 _conn: duckdb.DuckDBPyConnection | None = None
+_conn_path: str | None = None
 _lock = threading.Lock()
 
 
@@ -32,6 +33,9 @@ def _db_path() -> str:
 def get_conn() -> Generator[duckdb.DuckDBPyConnection, None, None]:
     """Yield the shared DuckDB connection under the global lock.
 
+    The connection is reopened automatically when DB_PATH changes (e.g. between
+    test runs that each use a separate tmp_db).
+
     Usage::
 
         from src.api.db import get_conn
@@ -39,12 +43,21 @@ def get_conn() -> Generator[duckdb.DuckDBPyConnection, None, None]:
         with get_conn() as con:
             rows = con.execute("SELECT ...").fetchall()
     """
-    global _conn
+    global _conn, _conn_path
     with _lock:
+        current_path = _db_path()
+        if _conn is not None and _conn_path != current_path:
+            # DB_PATH changed (e.g. test isolation) — close and reopen.
+            try:
+                _conn.close()
+            except Exception:
+                pass
+            _conn = None
+            _conn_path = None
         if _conn is None:
-            path = _db_path()
-            if os.path.exists(path):
-                _conn = duckdb.connect(path)
+            if os.path.exists(current_path):
+                _conn = duckdb.connect(current_path)
+                _conn_path = current_path
         if _conn is None:
             yield None  # type: ignore[misc]
             return
