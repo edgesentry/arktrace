@@ -75,8 +75,10 @@ def capture_causal_badge(page, out: Path) -> None:
     try:
         page.wait_for_selector(".att-badge, .causal-badge", timeout=8_000)
     except Exception:
-        print("  WARNING: causal badge not found — #43 may not be merged yet; "
-              "falling back to full review panel")
+        print(
+            "  WARNING: causal badge not found — #43 may not be merged yet; "
+            "falling back to full review panel"
+        )
     time.sleep(0.5)
     panel = page.locator("#review-panel")
     panel.screenshot(path=str(out))
