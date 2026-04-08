@@ -724,13 +724,6 @@ main_menu() {
     echo "     When: after a scoring run, or to verify issue #62 acceptance criteria"
     echo "      Who: data scientist, intelligence analyst"
     echo
-    echo "11) SAR Feature Smoke Test"
-    echo "     What: initialise a fresh DuckDB, seed one vessel with an AIS gap + three"
-    echo "           unmatched SAR detections nearby, run unmatched_sar_detections_30d,"
-    echo "           and verify the attribution count is correct"
-    echo "     When: after changing SAR ingestion or feature logic; verifying issue #84"
-    echo "      Who: developer, data engineer"
-    echo
     echo "── DATA SETUP (run once / when sanctions data is stale) ─────────────────────────"
     echo "9) Prepare Sanctions DB"
     echo "     What: download OpenSanctions dataset and load it into public_eval.duckdb"
@@ -741,6 +734,13 @@ main_menu() {
     echo "     What: slice a small demo DuckDB from the full sanctions DB for fast UI testing"
     echo "     When: after job 9, or when the demo dataset is out of date"
     echo "      Who: developer, product"
+    echo
+    echo "11) SAR Feature Smoke Test"
+    echo "     What: initialise a fresh DuckDB, seed one vessel with an AIS gap + three"
+    echo "           unmatched SAR detections nearby, run unmatched_sar_detections_30d,"
+    echo "           and verify the attribution count is correct"
+    echo "     When: after changing SAR ingestion or feature logic; verifying issue #84"
+    echo "      Who: developer, data engineer"
     echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
