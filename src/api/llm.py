@@ -197,8 +197,8 @@ class LlamaCppClient:
                 else:
                     return None
         except Exception as e:
-            import traceback
             import sys
+            import traceback
             _log.error("Failed to initialise llama-cpp model: %s: %s", type(e).__name__, e)
             print(f"FAILED TO INIT LLAMACPP: {type(e).__name__}: {str(e)}", file=sys.stderr)
             traceback.print_exc()
