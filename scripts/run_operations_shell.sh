@@ -526,6 +526,95 @@ else:
 PY
 }
 
+run_sar_feature_smoke() {
+  echo
+  echo "[11] SAR Feature Smoke Test"
+
+  local db_path
+  db_path="$(prompt "DuckDB path (will be created fresh)" "/tmp/sar_smoke_test.duckdb")"
+
+  local gap_hours
+  gap_hours="$(prompt "AIS gap duration hours" "12")"
+
+  local vessel_lat
+  vessel_lat="$(prompt "Vessel last-known lat" "1.0")"
+
+  local vessel_lon
+  vessel_lon="$(prompt "Vessel last-known lon" "103.0")"
+
+  # Always init schema fresh so the test is self-contained
+  export DB_PATH="$db_path" GAP_HOURS="$gap_hours" \
+         VESSEL_LAT="$vessel_lat" VESSEL_LON="$vessel_lon"
+  (cd "$PROJECT_ROOT" && uv run python - <<'PY'
+import os
+from datetime import UTC, datetime, timedelta
+import duckdb
+from src.ingest.schema import init_schema
+from src.ingest.sar import ingest_sar_records
+from src.features.sar_detections import compute_unmatched_sar_detections
+
+db      = os.environ["DB_PATH"]
+gap_h   = float(os.environ.get("GAP_HOURS", "12"))
+v_lat   = float(os.environ.get("VESSEL_LAT", "1.0"))
+v_lon   = float(os.environ.get("VESSEL_LON", "103.0"))
+
+# Fresh schema
+init_schema(db)
+
+now        = datetime.now(UTC)
+gap_start  = now - timedelta(days=3)
+gap_end    = gap_start + timedelta(hours=gap_h)
+
+# Seed: two AIS pings bracketing the gap
+con = duckdb.connect(db)
+con.execute("""
+    INSERT INTO ais_positions (mmsi, timestamp, lat, lon, sog, nav_status, ship_type)
+    VALUES
+      ('123456789', ?, ?, ?, 8.0, 0, 70),
+      ('123456789', ?, ?, ?, 7.0, 0, 70)
+""", [gap_start - timedelta(hours=1), v_lat, v_lon,
+      gap_end   + timedelta(hours=1), v_lat, v_lon])
+con.close()
+print(f"Seeded vessel 123456789 with {gap_h}h AIS gap at ({v_lat}, {v_lon})")
+
+# Seed: three unmatched SAR detections during the gap (~11 km offset)
+detections = [
+    {"detection_id": "smoke-d1",
+     "detected_at": gap_start + timedelta(hours=2),
+     "lat": v_lat + 0.1, "lon": v_lon,      "source_scene": "S1A_IW_GRDH_smoke_1"},
+    {"detection_id": "smoke-d2",
+     "detected_at": gap_start + timedelta(hours=gap_h / 2),
+     "lat": v_lat + 0.1, "lon": v_lon + 0.1, "source_scene": "S1A_IW_GRDH_smoke_2"},
+    {"detection_id": "smoke-d3",
+     "detected_at": gap_end - timedelta(hours=2),
+     "lat": v_lat,       "lon": v_lon + 0.1, "source_scene": "S1A_IW_GRDH_smoke_3"},
+]
+ingest_sar_records(detections, db_path=db)
+print(f"Seeded {len(detections)} unmatched SAR detections during the gap")
+
+# Run feature computation
+result = compute_unmatched_sar_detections(db, window_days=30)
+if result.is_empty():
+    print("Result: FAILED — no unmatched detections attributed (expected 1 vessel)")
+    raise SystemExit(1)
+
+row = result.filter(result["mmsi"] == "123456789")
+if row.is_empty():
+    print("Result: FAILED — vessel 123456789 not in output")
+    raise SystemExit(1)
+
+count = row["unmatched_sar_detections_30d"][0]
+print(f"Result: SUCCESS — mmsi=123456789 unmatched_sar_detections_30d={count}")
+print(result)
+PY
+  )
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    echo "Result: FAILED"
+  fi
+  echo "Artifact: $db_path"
+}
+
 run_seed_dev_data() {
   echo
   echo "[6] Seed Dev Data"
@@ -603,6 +692,13 @@ main_menu() {
     echo "     When: after a scoring run, or to verify issue #62 acceptance criteria"
     echo "      Who: data scientist, intelligence analyst"
     echo
+    echo "11) SAR Feature Smoke Test"
+    echo "     What: initialise a fresh DuckDB, seed one vessel with an AIS gap + three"
+    echo "           unmatched SAR detections nearby, run unmatched_sar_detections_30d,"
+    echo "           and verify the attribution count is correct"
+    echo "     When: after changing SAR ingestion or feature logic; verifying issue #84"
+    echo "      Who: developer, data engineer"
+    echo
     echo "── DATA SETUP (run once / when sanctions data is stale) ─────────────────────────"
     echo "9) Prepare Sanctions DB"
     echo "     What: download OpenSanctions dataset and load it into public_eval.duckdb"
@@ -632,6 +728,7 @@ main_menu() {
       8) run_prelabel_evaluation ;;
       9) run_prepare_sanctions_db ;;
       10) run_build_sanctions_demo ;;
+      11) run_sar_feature_smoke ;;
       q|quit|exit)
         echo "Bye"
         return
