@@ -1,16 +1,17 @@
 """Shared LLM client — provider abstraction reused by C6 (analyst chat).
 
-Supports any OpenAI-compatible local runtime (MLX LM, LM Studio, Ollama, Jan,
-llamafile, Gemini), Anthropic Claude, and llama-cpp-python for zero-dependency
-local GGUF inference.
+Three providers:
+
+    llamacpp   — local GGUF inference via llama-cpp-python, no server required
+    anthropic  — Anthropic Claude API
+    openai     — any OpenAI-compatible remote API (OpenAI, Ollama, MLX, LM Studio, …)
 
 Provider selection via environment variables:
 
-    LLM_PROVIDER        mlx | lmstudio | ollama | gemini | anthropic | llamacpp
-                        (default: mlx)
-    LLM_BASE_URL        base URL for OpenAI-compat providers
-    LLM_API_KEY         API key (use "local" for local runtimes)
-    LLM_MODEL           model name or ID
+    LLM_PROVIDER        llamacpp | anthropic | openai  (default: openai)
+    LLM_BASE_URL        base URL for openai provider  (default: http://localhost:8080/v1)
+    LLM_API_KEY         API key — use "local" for self-hosted runtimes
+    LLM_MODEL           model name / ID
     ANTHROPIC_API_KEY   required when LLM_PROVIDER=anthropic
     LLAMACPP_MODEL_PATH path to GGUF model file (required when LLM_PROVIDER=llamacpp)
 """
@@ -35,7 +36,7 @@ class LLMClient(Protocol):
 
 
 class OpenAICompatClient:
-    """OpenAI-compatible /v1/chat/completions — MLX LM, LM Studio, Ollama, Jan, llamafile, Gemini."""
+    """OpenAI-compatible /v1/chat/completions — works with OpenAI, Ollama, MLX LM, LM Studio, and any other compatible endpoint."""
 
     def __init__(self, base_url: str, api_key: str, model: str) -> None:
         self._base_url = base_url.rstrip("/")
@@ -205,16 +206,17 @@ class LlamaCppClient:
 
 def get_llm_client() -> LLMClient:
     """Construct the appropriate LLMClient from environment variables."""
-    provider = os.getenv("LLM_PROVIDER", "mlx")
+    provider = os.getenv("LLM_PROVIDER", "openai")
+    if provider == "llamacpp":
+        return LlamaCppClient()
     if provider == "anthropic":
         return AnthropicClient(
             api_key=os.getenv("LLM_API_KEY", os.getenv("ANTHROPIC_API_KEY", "")),
             model=os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001"),
         )
-    if provider == "llamacpp":
-        return LlamaCppClient()
+    # "openai" or any unrecognised value — OpenAI-compatible remote API
     return OpenAICompatClient(
         base_url=os.getenv("LLM_BASE_URL", "http://localhost:8080/v1"),
         api_key=os.getenv("LLM_API_KEY", "local"),
-        model=os.getenv("LLM_MODEL", "mlx-community/Llama-3.2-3B-Instruct-4bit"),
+        model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
     )
