@@ -20,6 +20,9 @@ DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
 DEFAULT_VALIDATION_PATH = os.getenv(
     "VALIDATION_METRICS_PATH", "data/processed/validation_metrics.json"
 )
+DEFAULT_CAUSAL_EFFECTS_PATH = os.getenv("CAUSAL_EFFECTS_PATH") or output_uri(
+    "causal_effects.parquet"
+)
 
 router = APIRouter()
 
@@ -255,3 +258,57 @@ def vessel_types() -> JSONResponse:
     if df.is_empty():
         return JSONResponse([])
     return JSONResponse(sorted(df["vessel_type"].unique().to_list()))
+
+
+@router.get("/api/causal-effects")
+def causal_effects() -> JSONResponse:
+    """Return per-regime DiD ATT estimates from causal_effects.parquet.
+
+    Response shape:
+      { "available": true, "regimes": [
+          {
+            "regime": "OFAC Iran",
+            "att_estimate": 0.42,
+            "att_ci_lower": 0.31,
+            "att_ci_upper": 0.53,
+            "p_value": 0.0003,
+            "is_significant": true,
+            "n_treated": 18,
+            "n_control": 142,
+            "calibrated_weight": 0.55
+          }, ...
+      ]}
+    Returns { "available": false } if the file does not exist or cannot be read.
+    """
+    df = read_parquet_uri(DEFAULT_CAUSAL_EFFECTS_PATH)
+    if df is None or df.is_empty():
+        return JSONResponse({"available": False, "regimes": []})
+
+    required = {
+        "regime",
+        "att_estimate",
+        "att_ci_lower",
+        "att_ci_upper",
+        "p_value",
+        "is_significant",
+    }
+    if not required.issubset(set(df.columns)):
+        return JSONResponse({"available": False, "regimes": []})
+
+    regimes = []
+    for row in df.to_dicts():
+        regimes.append(
+            {
+                "regime": str(row.get("regime", "")),
+                "att_estimate": float(row.get("att_estimate", 0.0)),
+                "att_ci_lower": float(row.get("att_ci_lower", 0.0)),
+                "att_ci_upper": float(row.get("att_ci_upper", 0.0)),
+                "p_value": float(row.get("p_value", 1.0)),
+                "is_significant": bool(row.get("is_significant", False)),
+                "n_treated": int(row.get("n_treated", 0)),
+                "n_control": int(row.get("n_control", 0)),
+                "calibrated_weight": float(row.get("calibrated_weight", 0.0)),
+            }
+        )
+
+    return JSONResponse({"available": True, "regimes": regimes})

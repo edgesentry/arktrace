@@ -360,6 +360,30 @@
       border: 1px solid rgba(251,191,36,0.35);
       margin-top: 0.35rem;
     }
+    .causal-badge.causal-badge--dim {
+      background: rgba(100,116,139,0.12);
+      color: #64748b;
+      border-color: rgba(100,116,139,0.25);
+    }
+    .att-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.12rem 0.45rem;
+      border-radius: 3px;
+      font-size: 0.66rem;
+      font-weight: 600;
+      background: rgba(99,102,241,0.12);
+      color: #818cf8;
+      border: 1px solid rgba(99,102,241,0.3);
+      margin-top: 0.25rem;
+      font-family: monospace;
+    }
+    .att-badge.att-badge--ns {
+      background: rgba(100,116,139,0.10);
+      color: #64748b;
+      border-color: rgba(100,116,139,0.2);
+    }
     .causal-signals {
       margin-top: 0.3rem;
       font-size: 0.7rem;
@@ -1074,27 +1098,52 @@ function renderVesselDetails(meta) {
       if (area) area.innerHTML = '';
     });
 
-  fetch(`/api/vessels/${encodeURIComponent(meta.mmsi)}/causal`)
-    .then(r => r.json())
-    .then(data => {
-      const area = document.getElementById('causal-badge-area');
-      if (!area) return;
-      if (!data.is_candidate) {
-        area.innerHTML = '';
-        return;
-      }
-      const signalLines = (data.signals || []).map(s =>
+  Promise.all([
+    fetch(`/api/vessels/${encodeURIComponent(meta.mmsi)}/causal`).then(r => r.json()),
+    fetch('/api/causal-effects').then(r => r.json()).catch(() => ({ available: false, regimes: [] })),
+  ]).then(([causalData, effectsData]) => {
+    const area = document.getElementById('causal-badge-area');
+    if (!area) return;
+
+    let html = '';
+
+    // ── Shadow signal badge ──────────────────────────────────────────────
+    if (causalData.is_candidate) {
+      const signalLines = (causalData.signals || []).map(s =>
         `&#x2022; ${_escapeHtml(s.feature)}: recent&nbsp;${s.recent_value.toFixed(1)}, ` +
         `baseline&nbsp;${s.baseline_value.toFixed(1)}, ` +
         `uplift&nbsp;&times;${s.uplift_ratio.toFixed(1)}`
       ).join('<br/>');
-      area.innerHTML =
-        `<div class="causal-badge">&#9888; Shadow Signal &nbsp; ${data.causal_score.toFixed(2)}</div>` +
+      html +=
+        `<div class="causal-badge">&#9888; Shadow Signal &nbsp; ${causalData.causal_score.toFixed(2)}</div>` +
         `<div class="causal-signals" style="margin-top:0.2rem;color:#94a3b8;font-size:0.69rem;">` +
         `Not on any sanctions list — behaviour matches known evasion patterns.</div>` +
         (signalLines ? `<div class="causal-signals">${signalLines}</div>` : '');
-    })
-    .catch(() => {});
+    }
+
+    // ── ATT / DiD badge — one row per regime ────────────────────────────
+    if (effectsData.available && effectsData.regimes && effectsData.regimes.length > 0) {
+      html += `<div style="margin-top:0.45rem;">`;
+      for (const r of effectsData.regimes) {
+        const sign = r.att_estimate >= 0 ? '+' : '';
+        const pFmt = r.p_value < 0.001 ? 'p &lt; 0.001'
+          : r.p_value < 0.01 ? `p = ${r.p_value.toFixed(3)}`
+          : `p = ${r.p_value.toFixed(2)}`;
+        const ns = !r.is_significant;
+        const badgeCls = ns ? 'att-badge att-badge--ns' : 'att-badge';
+        const label = _escapeHtml(r.regime);
+        html +=
+          `<div class="${badgeCls}" title="${label}${ns ? ' (not significant)' : ''}">` +
+          `&#x26A1; ${label} &nbsp; ATT = ${sign}${r.att_estimate.toFixed(2)} &nbsp;` +
+          `95% CI [${r.att_ci_lower.toFixed(2)}, ${r.att_ci_upper.toFixed(2)}] &nbsp;` +
+          `${pFmt}${ns ? ' &nbsp; n.s.' : ''}` +
+          `</div>`;
+      }
+      html += `</div>`;
+    }
+
+    area.innerHTML = html;
+  }).catch(() => {});
 }
 
 function renderReviewHistory(items) {
