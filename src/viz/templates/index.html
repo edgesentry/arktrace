@@ -697,15 +697,43 @@ map.on('load', () => {
     }
   });
 
+  // Selected vessel highlight — rendered on top of the base layer
+  map.addLayer({
+    id: 'vessels-circle-selected',
+    type: 'circle',
+    source: 'vessels',
+    filter: ['==', 'mmsi', ''],   // no vessel selected initially
+    paint: {
+      'circle-radius': 13,
+      'circle-color': [
+        'case',
+        ['>=', ['get', 'confidence'], 0.7], 'rgba(220,38,38,0.95)',
+        ['>=', ['get', 'confidence'], 0.4], 'rgba(245,158,11,0.95)',
+        'rgba(34,197,94,0.95)'
+      ],
+      'circle-stroke-width': 3,
+      'circle-stroke-color': '#ffffff',
+      'circle-opacity': 1,
+    }
+  });
+
+  function selectVesselOnMap(mmsi) {
+    map.setFilter('vessels-circle-selected', ['==', 'mmsi', mmsi || '']);
+    document.querySelectorAll('tr.watchlist-row.selected').forEach(r => r.classList.remove('selected'));
+    const matchingRow = document.querySelector(`tr.watchlist-row[data-mmsi='${mmsi}']`);
+    if (matchingRow) {
+      matchingRow.classList.add('selected');
+      matchingRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
   map.on('click', 'vessels-circle', (e) => {
     const p = e.features[0].properties;
     const mmsi = String(p.mmsi);
     const vesselName = p.vessel_name || mmsi;
 
-    // Highlight matching table row
-    document.querySelectorAll('tr.watchlist-row.selected').forEach(r => r.classList.remove('selected'));
+    selectVesselOnMap(mmsi);
     const matchingRow = document.querySelector(`tr.watchlist-row[data-mmsi='${mmsi}']`);
-    if (matchingRow) matchingRow.classList.add('selected');
 
     // Open review panel with vessel meta
     const vesselMeta = {
@@ -745,10 +773,6 @@ document.getElementById('watchlist-tbody').addEventListener('click', (e) => {
   const row = e.target.closest('tr.watchlist-row');
   if (!row) return;
 
-  // Highlight selected row
-  document.querySelectorAll('tr.watchlist-row.selected').forEach(r => r.classList.remove('selected'));
-  row.classList.add('selected');
-
   const lat = parseFloat(row.dataset.lat);
   const lon = parseFloat(row.dataset.lon);
   const vesselMeta = {
@@ -762,6 +786,7 @@ document.getElementById('watchlist-tbody').addEventListener('click', (e) => {
   };
   if (isNaN(lat) || isNaN(lon)) return;
 
+  selectVesselOnMap(vesselMeta.mmsi);
   map.flyTo({ center: [lon, lat], zoom: 8, duration: 1000 });
   openReviewPanel(vesselMeta.mmsi, vesselMeta.name, vesselMeta);
   loadBriefForReviewPanel(vesselMeta.mmsi, vesselMeta.name);
