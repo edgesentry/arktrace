@@ -202,6 +202,20 @@ PY
 }
 
 seed_demo_causal_effects() {
+  # Auto-detect MinIO running at localhost:9000 and configure S3 vars so
+  # write_parquet_uri sends the file to MinIO (where the dashboard reads from)
+  # rather than the local filesystem.
+  if curl -sf http://localhost:9000/minio/health/live >/dev/null 2>&1; then
+    export S3_BUCKET="${S3_BUCKET:-arktrace}"
+    export S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}"
+    export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-minioadmin}"
+    export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-minioadmin}"
+    export AWS_REGION="${AWS_REGION:-us-east-1}"
+    echo "  MinIO detected at localhost:9000 — writing to s3://$S3_BUCKET/processed/"
+  else
+    echo "  MinIO not detected — writing to local data/processed/"
+  fi
+
   (cd "$PROJECT_ROOT" && uv run python - <<'PY'
 import polars as pl
 from src.storage.config import output_uri
