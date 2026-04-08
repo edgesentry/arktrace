@@ -166,6 +166,8 @@ If the ATT is positive and statistically significant (p < 0.05) for a regime, th
 
 The calibrated weight and per-regime effect sizes are written to `<region>_causal_effects.parquet`.
 
+**Dashboard:** `GET /api/causal-effects` reads this file and returns all regimes as JSON. The vessel review panel renders one badge per regime showing the ATT estimate, 95% CI, and p-value. Non-significant results (p ≥ 0.05) are visually dimmed so analysts can distinguish calibrated evidence from inconclusive estimates at a glance.
+
 ### Adding a new sanction regime
 
 Sanction regimes are configured dynamically in `config/sanction_regimes.yaml`. To add a new regime (e.g. EU 14th sanctions package against Russia) without modifying source code, add a new entry to the `regimes` dictionary with the following required fields:
