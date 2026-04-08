@@ -828,7 +828,9 @@ def main() -> None:
                 for step_fn in rescore_steps:
                     ok = step_fn(preset, non_interactive)
                     if not ok and non_interactive:
-                        print(_red("\nRe-score step failed; stopping cadence loop."), file=sys.stderr)
+                        print(
+                            _red("\nRe-score step failed; stopping cadence loop."), file=sys.stderr
+                        )
                         sys.exit(1)
         except KeyboardInterrupt:
             print(_dim("\nRe-score loop stopped."))

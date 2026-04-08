@@ -240,11 +240,13 @@ def vessel_signals(mmsi: str) -> JSONResponse:
     except Exception:
         signals = []
 
-    return JSONResponse({
-        "mmsi": mmsi,
-        "confidence": row.get("confidence"),
-        "signals": signals,
-    })
+    return JSONResponse(
+        {
+            "mmsi": mmsi,
+            "confidence": row.get("confidence"),
+            "signals": signals,
+        }
+    )
 
 
 @router.get("/api/vessel-types")
