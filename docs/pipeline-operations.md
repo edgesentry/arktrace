@@ -29,6 +29,9 @@ Available menu jobs:
 - Review-Feedback Evaluation
 - Historical Backtesting + Public Integration Batch
 - Demo/Smoke
+- SAR Feature Smoke Test (job 11)
+- EO Feature Smoke Test (job 12)
+- Ingest EO Detections from CSV (job 13) — load a local EO CSV into `eo_detections` without a GFW API token, then optionally run feature matrix + scoring to verify in the dashboard
 
 ### Delayed-label intelligence loop (backtracking)
 
