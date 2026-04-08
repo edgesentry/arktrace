@@ -611,8 +611,40 @@ PY
   local rc=$?
   if [[ $rc -ne 0 ]]; then
     echo "Result: FAILED"
+    return
   fi
   echo "Artifact: $db_path"
+
+  if ! prompt_yes_no "Run full pipeline + launch dashboard to verify in app" "false"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Scoring (composite + watchlist) ───────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python src/score/composite.py \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (composite scoring)"
+    return
+  fi
+
+  print_watchlist_summary "$watchlist_path"
+  echo
+  echo "── To verify in the dashboard ────────────────────────────────────────────────"
+  echo "  1. Start the app:  docker-compose up  (or: DB_PATH=$db_path uv run python -m src.api.main)"
+  echo "  2. Open: http://localhost:8000"
+  echo "  3. Click vessel 123456789 on the map → detail panel → Signals tab"
+  echo "     Look for: 'Unmatched Sar Detections 30D  3 detections'"
+  echo "  4. Open: http://localhost:8000/api/vessels/123456789/dispatch-brief"
+  echo "     Check 'signals' array for unmatched_sar_detections_30d"
 }
 
 run_seed_dev_data() {
