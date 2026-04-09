@@ -488,7 +488,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    bbox = tuple(args.bbox) if args.bbox else None  # type: ignore[assignment]
+    bbox: tuple[float, float, float, float] | None = tuple(args.bbox) if args.bbox else None
 
     if args.nmea:
         n = ingest_nmea(args.file, db_path=args.db, bbox=bbox, batch_size=args.batch_size)
