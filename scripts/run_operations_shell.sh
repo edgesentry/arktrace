@@ -409,16 +409,57 @@ run_ingest_ais_csv() {
   echo
   echo "[14] Ingest AIS Positions from CSV / NMEA file"
 
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
   local file_path
-  file_path="$(prompt "Path to AIS file (CSV or NMEA)" "data/raw/ais_feed.csv")"
+  file_path="$(prompt "Path to AIS file (CSV or NMEA)" "")"
+
+  # If no file given, offer to generate a sample from the existing DB
+  if [[ -z "$file_path" ]]; then
+    local sample_path="$PROJECT_ROOT/data/raw/ais_sample_export.csv"
+    echo
+    echo "  No file specified."
+    if prompt_yes_no "Generate a sample CSV from $db_path to test the ingestion path" "true"; then
+      echo "  Exporting 20 rows from ais_positions → $sample_path ..."
+      (cd "$PROJECT_ROOT" && uv run python -c "
+import duckdb, polars as pl, sys
+db = '$db_path'
+try:
+    con = duckdb.connect(db, read_only=True)
+    df = con.execute('''
+        SELECT mmsi AS MMSI, timestamp AS BaseDateTime,
+               lat AS LAT, lon AS LON,
+               sog AS SOG, cog AS COG,
+               nav_status AS Status, ship_type AS VesselType
+        FROM ais_positions LIMIT 20
+    ''').pl()
+    con.close()
+except Exception as e:
+    print(f'Error: {e}', file=sys.stderr)
+    sys.exit(1)
+if df.is_empty():
+    print('No rows in ais_positions — run Full Screening (job 1) first.', file=sys.stderr)
+    sys.exit(1)
+df.write_csv('$sample_path')
+print(f'Exported {df.height} rows to $sample_path')
+") || { echo "Result: FAILED (export)"; return; }
+      file_path="$sample_path"
+    else
+      echo "Aborted — provide a file path to continue."
+      return
+    fi
+  fi
+
+  if [[ ! -f "$PROJECT_ROOT/$file_path" && ! -f "$file_path" ]]; then
+    echo "Error: file not found: $file_path"
+    return
+  fi
 
   local mode="csv"
   if prompt_yes_no "Parse as NMEA 0183 VDM/VDO sentences (default: CSV)" "false"; then
     mode="nmea"
   fi
-
-  local db_path
-  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
 
   local bbox_str
   bbox_str="$(prompt "Bounding box lat_min lon_min lat_max lon_max (leave blank for no filter)" "")"
