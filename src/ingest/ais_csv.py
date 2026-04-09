@@ -40,9 +40,9 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 
 import duckdb
 import polars as pl
@@ -155,9 +155,7 @@ def ingest_csv(
             pl.col("timestamp")
             .str.strptime(pl.Datetime, "%Y-%m-%dT%H:%M:%S%.f", strict=False)
             .fill_null(
-                pl.col("timestamp").str.strptime(
-                    pl.Datetime, "%Y-%m-%d %H:%M:%S", strict=False
-                )
+                pl.col("timestamp").str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S", strict=False)
             )
             .dt.replace_time_zone("UTC")
             .alias("timestamp")
@@ -336,8 +334,7 @@ def _iter_nmea_records(
             if bbox:
                 lat_min, lon_min, lat_max, lon_max = bbox
                 if not (
-                    lat_min <= record["lat"] <= lat_max
-                    and lon_min <= record["lon"] <= lon_max
+                    lat_min <= record["lat"] <= lat_max and lon_min <= record["lon"] <= lon_max
                 ):
                     continue
 

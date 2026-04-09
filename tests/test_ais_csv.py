@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import textwrap
-from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
-import polars as pl
 import pytest
 
 from src.ingest.ais_csv import (
     _armored_to_bits,
-    _decode_class_b_report,
     _decode_position_report,
     _iter_nmea_records,
     _parse_column_map,
@@ -20,8 +17,6 @@ from src.ingest.ais_csv import (
     ingest_csv,
     ingest_nmea,
 )
-from src.ingest.schema import init_schema
-
 
 # ---------------------------------------------------------------------------
 # CSV ingestion
@@ -49,7 +44,9 @@ def test_ingest_csv_default_columns(tmp_path):
     assert n == 2
 
     con = duckdb.connect(db_path, read_only=True)
-    rows = con.execute("SELECT mmsi, lat, lon, sog, ship_type FROM ais_positions ORDER BY mmsi").fetchall()
+    rows = con.execute(
+        "SELECT mmsi, lat, lon, sog, ship_type FROM ais_positions ORDER BY mmsi"
+    ).fetchall()
     con.close()
     assert len(rows) == 2
     assert rows[0][0] == "123456789"
@@ -163,7 +160,9 @@ def _encode_bits(values: list[tuple[int, int]]) -> str:
     return "".join(chars)
 
 
-def _make_type1_payload(mmsi: int, lat: float, lon: float, sog: float = 0.0, cog: float = 0.0, nav_status: int = 0) -> tuple[str, int]:
+def _make_type1_payload(
+    mmsi: int, lat: float, lon: float, sog: float = 0.0, cog: float = 0.0, nav_status: int = 0
+) -> tuple[str, int]:
     """Build a minimal AIS type-1 payload (168 bits)."""
     lat_raw = int(lat * 600_000)
     lon_raw = int(lon * 600_000)
@@ -174,22 +173,22 @@ def _make_type1_payload(mmsi: int, lat: float, lon: float, sog: float = 0.0, cog
         return v & ((1 << bits) - 1)
 
     fields = [
-        (1, 6),          # msg type
-        (0, 2),          # repeat
+        (1, 6),  # msg type
+        (0, 2),  # repeat
         (mmsi, 30),
         (nav_status, 4),
-        (0, 8),          # rate of turn
+        (0, 8),  # rate of turn
         (sog_raw, 10),
-        (0, 1),          # pos accuracy
+        (0, 1),  # pos accuracy
         (twos(lon_raw, 28), 28),
         (twos(lat_raw, 27), 27),
         (cog_raw, 12),
-        (0, 9),          # true heading
-        (0, 6),          # time stamp
-        (0, 4),          # maneuver
-        (0, 3),          # spare
-        (0, 1),          # RAIM
-        (0, 19),         # radio status
+        (0, 9),  # true heading
+        (0, 6),  # time stamp
+        (0, 4),  # maneuver
+        (0, 3),  # spare
+        (0, 1),  # RAIM
+        (0, 19),  # radio status
     ]
     return _encode_bits(fields), 0
 
@@ -198,7 +197,7 @@ def test_armored_to_bits_roundtrip():
     """Encoding and decoding should be consistent."""
     payload, fill = _make_type1_payload(123456789, lat=1.3, lon=103.8)
     bits = _armored_to_bits(payload, fill)
-    assert _uint(bits, 0, 6) == 1   # message type
+    assert _uint(bits, 0, 6) == 1  # message type
     assert _uint(bits, 8, 30) == 123456789
 
 
