@@ -122,6 +122,13 @@ The full stack runs on a single machine — a field laptop, a shipboard server, 
 
 aisstream.io supports all regions via the `--bbox lat_min lon_min lat_max lon_max` flag. The default bbox is the Singapore / Malacca Strait (`−5 92 22 122`). For other regions, pass `--bbox` with the appropriate coordinates and `--db` to write to a region-specific DuckDB file. Marine Cadastre is used only for US coastal regions (Gulf of Mexico, US West Coast). For non-US historical backfill (Japan Sea, Europe, Middle East), use AISHub or MarineTraffic CSV exports loaded via `load_csv_to_duckdb()` with a custom bbox. See [regional-playbooks.md](regional-playbooks.md) for per-region configuration.
 
+**S-AIS / provider-agnostic ingestion:** arktrace is AIS-provider agnostic. Any Satellite AIS (S-AIS) provider (Spire Maritime, exactEarth, ORBCOMM, etc.) can substitute or supplement aisstream.io without code changes. Two ingestion paths are supported:
+
+- **NMEA feed:** pipe raw NMEA sentences to `src/ingest/ais_stream.py` — sentences are decoded and written to the same DuckDB schema as the WebSocket path.
+- **CSV export:** place any S-AIS CSV export in `_inputs/custom_feeds/` with a `.columnmap.json` sidecar mapping provider column names to the arktrace schema. The auto-detector picks it up on the next pipeline run (`step_custom_feeds`). See [pipeline-operations.md](pipeline-operations.md#custom-feed-drop-ins) for the full drop-in interface.
+
+Switching providers or adding a secondary S-AIS feed requires no architectural changes — only a column mapping file.
+
 ### Sanctions & Registry Data
 
 | Source | Data | Format | Cost |
@@ -490,3 +497,24 @@ The full pipeline (historical AIS + scoring) runs on a standard laptop:
 For live streaming (aisstream.io), the incremental update pipeline runs in under 60 seconds per batch.
 
 **Edge gateway benchmark (measured):** Re-scoring 5,000 vessels — feature matrix (`build_matrix.py`) + composite scoring (HDBSCAN + Isolation Forest + SHAP) + watchlist output — completes in **5.75 seconds** on a 14-core Apple M-series laptop. On a constrained 4-core / 4 GB edge gateway (Raspberry Pi 4 / NVIDIA Jetson Nano class), the same pipeline is well within the 30-second target given the pipeline is CPU-bound on the HDBSCAN and Isolation Forest steps which scale sub-linearly with vessel count. See `scripts/benchmark_rescore.py` and `docs/deployment.md` for the full benchmark command and reproduction instructions.
+
+---
+
+## Open-Source Model and IP Protection
+
+arktrace is published under Apache 2.0. The base algorithm — causal model architecture, feature engineering pipeline, scoring engine, and dashboard — is fully public. This is a deliberate design choice: open review strengthens trust with a government counterparty and allows Cap Vista to independently audit the methodology.
+
+**Public layer (Apache 2.0, always open):**
+- Causal model architecture (DiD ATT framework, `src/score/causal_sanction.py`)
+- Feature engineering pipeline (`src/features/`)
+- Composite scoring engine (`src/score/composite.py`)
+- SHAP explainability layer
+- Dashboard and analyst workflow
+
+**Protected layer (Cap Vista's operational parameters, never published):**
+- Calibrated scoring thresholds derived from Cap Vista's operational environment
+- Patrol-derived feedback labels (cleared / confirmed vessels)
+- Cap Vista-specific `regimes.yaml` weight tuning
+- Any proprietary feed column mappings in `_inputs/custom_feeds/`
+
+Cap Vista's calibrated model is operationally distinct from the public baseline even though it runs on the same open-source codebase. A competitor who forks the repository gets the algorithm — not Cap Vista's 7-week calibration or patrol-derived ground truth. The protected parameters are stored outside the repository and are never committed to version control.
