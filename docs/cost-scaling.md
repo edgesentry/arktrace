@@ -95,6 +95,21 @@ Storage growth rate: ~20 GB/month per regional AIS stream. At 5 regions: ~100 GB
 
 ---
 
+## 6. Engagement Pricing — Phase C
+
+Following successful PoC completion, ongoing engineering and operations transition to a Phase C retainer. Pricing reflects a single-client engagement with the Principal Architect as sole engineer; rates are adjusted proportionally if Cap Vista brings additional client engagements to the same infrastructure base.
+
+| Tier | Scope | Monthly retainer (SGD) |
+|---|---|---|
+| **Tier 2 — Managed Operations** | Ongoing monitoring, model recalibration, region expansion, maintenance; cloud infrastructure at pre-agreed cap | **$22,000 / month** |
+| **Tier 3 — Expanded Team** | All Tier 2 scope + additional engineers, SLA-backed operations, parallel engineering workstreams | **$30,000–$38,000 / month** |
+
+**Multi-client adjustment:** Tier 2 and Tier 3 rates above assume a dedicated single-client engagement. If Cap Vista introduces additional agency clients to the same arktrace deployment, the retainer is renegotiated on a cost-sharing basis — reducing the per-client cost proportionally.
+
+**Infrastructure cost cap:** cloud infrastructure costs are pre-agreed at contract signing and billed at cost with no markup. On-premises deployment eliminates cloud costs entirely.
+
+---
+
 ## Related Documents
 
 - [docs/deployment.md](deployment.md) — infrastructure setup and Docker Compose configuration
