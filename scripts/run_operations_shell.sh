@@ -148,7 +148,7 @@ run_backtesting_public_batch() {
     strict_flag=(--strict-known-cases)
   fi
 
-  if ! run_cmd uv run python scripts/run_public_backtest_batch.py --regions "$regions" "${strict_flag[@]}"; then
+  if ! run_cmd uv run python scripts/run_public_backtest_batch.py --regions "$regions" "${strict_flag[@]+"${strict_flag[@]}"}"; then
     echo "Result: FAILED"
     return
   fi
@@ -242,7 +242,7 @@ run_prepare_sanctions_db() {
   fi
 
   if ! run_cmd uv run python scripts/prepare_public_sanctions_db.py \
-      --db "$db_path" "${force_download_flag[@]}" "${force_reload_flag[@]}"; then
+      --db "$db_path" "${force_download_flag[@]+"${force_download_flag[@]}"}" "${force_reload_flag[@]+"${force_reload_flag[@]}"}"; then
     echo "Result: FAILED"
     return
   fi
