@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 
 import duckdb
 import httpx
