@@ -1108,6 +1108,148 @@ if pos == 0:
   print_watchlist_summary "$watchlist_path"
 }
 
+run_fetch_aisstream() {
+  echo
+  echo "[19] Fetch aisstream.io Live AIS — Singapore / Malacca Strait"
+  echo
+  echo "  aisstream.io is a free real-time AIS WebSocket stream (no equipment required)."
+  echo "  Register instantly at https://aisstream.io to get an API key."
+  echo "  Set AISSTREAM_API_KEY in .env or enter it below."
+  echo
+  echo "  ⚠️  Live data only — no historical. Run on a schedule to build up history."
+  echo "     Tip: add to crontab to fetch every 30 min automatically."
+  echo
+
+  local api_key
+  api_key="${AISSTREAM_API_KEY:-}"
+  if [[ -z "$api_key" ]]; then
+    api_key="$(prompt "aisstream.io API key")"
+  else
+    echo "  Using AISSTREAM_API_KEY from environment."
+  fi
+
+  if [[ -z "$api_key" ]]; then
+    echo "Error: API key required."
+    return
+  fi
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
+  local duration
+  duration="$(prompt "Collection duration seconds" "300")"
+
+  echo
+  echo "  Bounding box presets:"
+  echo "    1) Singapore / Malacca Strait  (lat -2–8, lon 98–110)  [default]"
+  echo "    2) Strait of Singapore only    (lat 1.0–1.5, lon 103.5–104.5)"
+  echo "    3) Custom"
+  echo
+  local bbox_choice
+  read -r -p "  Choose bbox [1]: " bbox_choice
+  bbox_choice="${bbox_choice:-1}"
+
+  local bbox_args=()
+  case "$bbox_choice" in
+    1) bbox_args=(--bbox -2 98 8 110) ;;
+    2) bbox_args=(--bbox 1.0 103.5 1.5 104.5) ;;
+    3)
+      local lat_min lon_min lat_max lon_max
+      lat_min="$(prompt "lat_min" "-2")"
+      lon_min="$(prompt "lon_min" "98")"
+      lat_max="$(prompt "lat_max" "8")"
+      lon_max="$(prompt "lon_max" "110")"
+      bbox_args=(--bbox "$lat_min" "$lon_min" "$lat_max" "$lon_max")
+      ;;
+    *)
+      echo "Invalid — using Singapore / Malacca default"
+      bbox_args=(--bbox -2 98 8 110)
+      ;;
+  esac
+
+  echo
+  echo "── Collecting live AIS from aisstream.io ───────────────────────────────────────"
+  if ! run_cmd uv run python -m src.ingest.aisstream \
+      --api-key "$api_key" \
+      --db "$db_path" \
+      --duration "$duration" \
+      "${bbox_args[@]+"${bbox_args[@]}"}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+
+  echo
+  local total_rows
+  total_rows="$(cd "$PROJECT_ROOT" && uv run python -c "
+import duckdb
+con = duckdb.connect('$db_path', read_only=True)
+n = con.execute('SELECT count(*) FROM ais_positions').fetchone()[0]
+v = con.execute('SELECT count(DISTINCT mmsi) FROM ais_positions').fetchone()[0]
+con.close()
+print(f'  Total positions in DB : {n}')
+print(f'  Unique vessels        : {v}')
+" 2>/dev/null)"
+  echo "$total_rows"
+
+  if ! prompt_yes_no "Run feature matrix + scoring + Precision@50?" "false"; then
+    echo
+    echo "  Tip: fetch a few more times first to build up position history, then score."
+    echo "  Add to crontab:  */30 * * * * cd $PROJECT_ROOT && uv run python -m src.ingest.aisstream --api-key $api_key --db $db_path --duration 300 ${bbox_args[*]+"${bbox_args[*]}"}"
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python -m src.score.watchlist \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (scoring)"
+    return
+  fi
+
+  echo
+  echo "── Precision@50 ───────────────────────────────────────────────────────────────"
+  local tmp_metrics
+  tmp_metrics="$(mktemp /tmp/arktrace_metrics_XXXXXX.json)"
+  if (cd "$PROJECT_ROOT" && uv run python -m src.score.validate \
+        --db "$db_path" \
+        --watchlist "$watchlist_path" \
+        --output "$tmp_metrics") >/dev/null 2>&1; then
+    (cd "$PROJECT_ROOT" && uv run python -c "
+import json
+with open('$tmp_metrics') as f:
+    m = json.load(f)
+p50   = m.get('precision_at_50', 'n/a')
+r200  = m.get('recall_at_200', 'n/a')
+auroc = m.get('auroc', 'n/a')
+total = m.get('candidate_count', 'n/a')
+pos   = m.get('positive_count', 'n/a')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50  : {p50:.3f}  (target ≥ {target})  {status}' if isinstance(p50, float) else f'  Precision@50 : {p50}')
+print(f'  Recall@200    : {r200:.3f}' if isinstance(r200, float) else f'  Recall@200   : {r200}')
+print(f'  AUROC         : {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC        : {auroc}')
+print(f'  Candidates    : {total}  (OFAC positives: {pos})')
+if pos == 0:
+    print()
+    print('  ⚠️  No OFAC positives yet — need more position history.')
+    print('     Run job 19 a few more times or set up the cron schedule.')
+")
+  fi
+  rm -f "$tmp_metrics"
+  print_watchlist_summary "$watchlist_path"
+}
+
 main_menu() {
   while true; do
     echo
@@ -1228,6 +1370,12 @@ main_menu() {
     echo "     When: getting real Singapore Strait AIS data (free, requires aishub.net account)"
     echo "      Who: developer, data scientist"
     echo
+    echo "19) Fetch aisstream.io Live AIS — Singapore / Malacca Strait"
+    echo "     What: collect live AIS via WebSocket from aisstream.io for a configurable"
+    echo "           duration; ingest into DuckDB; optionally score + Precision@50"
+    echo "     When: getting real AIS data immediately (free, instant signup, no equipment)"
+    echo "      Who: developer, data scientist"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -1254,6 +1402,7 @@ main_menu() {
       16) run_precision_verification ;;
       17) run_download_ais_marine_cadastre ;;
       18) run_fetch_aishub ;;
+      19) run_fetch_aisstream ;;
       q|quit|exit)
         echo "Bye"
         return
