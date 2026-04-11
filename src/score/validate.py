@@ -126,7 +126,8 @@ def main() -> None:
     args = parser.parse_args()
 
     metrics = validate_watchlist(args.db, args.watchlist, args.output)
-    print(json.dumps(metrics, indent=2))
+    for key, val in metrics.items():
+        print(f"  {key}: {val}")
 
 
 if __name__ == "__main__":

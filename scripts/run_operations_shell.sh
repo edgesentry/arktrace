@@ -148,7 +148,7 @@ run_backtesting_public_batch() {
     strict_flag=(--strict-known-cases)
   fi
 
-  if ! run_cmd uv run python scripts/run_public_backtest_batch.py --regions "$regions" "${strict_flag[@]}"; then
+  if ! run_cmd uv run python scripts/run_public_backtest_batch.py --regions "$regions" "${strict_flag[@]+"${strict_flag[@]}"}"; then
     echo "Result: FAILED"
     return
   fi
@@ -242,7 +242,7 @@ run_prepare_sanctions_db() {
   fi
 
   if ! run_cmd uv run python scripts/prepare_public_sanctions_db.py \
-      --db "$db_path" "${force_download_flag[@]}" "${force_reload_flag[@]}"; then
+      --db "$db_path" "${force_download_flag[@]+"${force_download_flag[@]}"}" "${force_reload_flag[@]+"${force_reload_flag[@]}"}"; then
     echo "Result: FAILED"
     return
   fi
@@ -517,6 +517,178 @@ print(f'Exported {df.height} rows to $sample_path')
   echo "  3. API:  curl http://localhost:8000/api/vessels"
 }
 
+run_precision_verification() {
+  echo
+  echo "[16] Precision@50 Verification"
+  echo
+  echo "  Choose a verification level:"
+  echo "    1) Quick  — re-score + validate against OFAC labels in existing DB"
+  echo "    2) Full   — run backtest with labels manifest (Precision@K, AUROC)"
+  echo "    3) Public — full public OpenSanctions integration test (pytest)"
+  echo
+  local level
+  read -r -p "  Choose [1]: " level
+  level="${level:-1}"
+
+  case "$level" in
+    1)
+      echo
+      echo "── Option 1: Quick validate ────────────────────────────────────────────────────"
+      local db_path
+      db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+      local watchlist_path
+      watchlist_path="$(prompt "Watchlist output path" "data/processed/candidate_watchlist.parquet")"
+
+      echo
+      echo "── Re-scoring vessels ──────────────────────────────────────────────────────────"
+      if ! run_cmd uv run python -m src.score.watchlist --db "$db_path" --output "$watchlist_path"; then
+        echo "Result: FAILED (scoring)"
+        return
+      fi
+
+      echo
+      echo "── Computing validation metrics ────────────────────────────────────────────────"
+      local metrics_path
+      metrics_path="$(prompt "Metrics output path" "data/processed/validation_metrics.json")"
+      if ! run_cmd uv run python -m src.score.validate \
+          --db "$db_path" \
+          --watchlist "$watchlist_path" \
+          --output "$metrics_path"; then
+        echo "Result: FAILED (validate)"
+        return
+      fi
+
+      echo
+      echo "── Results ─────────────────────────────────────────────────────────────────────"
+      (cd "$PROJECT_ROOT" && uv run python -c "
+import json, sys
+with open('$metrics_path') as f:
+    m = json.load(f)
+p50 = m.get('precision_at_50', 'n/a')
+r200 = m.get('recall_at_200', 'n/a')
+auroc = m.get('auroc', 'n/a')
+total = m.get('candidate_count', 'n/a')
+pos = m.get('positive_count', 'n/a')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50  : {p50:.3f}  (target ≥ {target})  {status}')
+print(f'  Recall@200    : {r200:.3f}' if isinstance(r200, float) else f'  Recall@200    : {r200}')
+print(f'  AUROC         : {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC         : {auroc}')
+print(f'  Candidates    : {total}  (positives: {pos})')
+")
+      ;;
+
+    2)
+      echo
+      echo "── Option 2: Full backtest ──────────────────────────────────────────────────────"
+      local manifest_path
+      manifest_path="$(prompt "Evaluation manifest JSON" "data/processed/evaluation_manifest.json")"
+      local report_path
+      report_path="$(prompt "Report output path" "data/processed/backtest_report.json")"
+
+      if [[ ! -f "$PROJECT_ROOT/$manifest_path" ]]; then
+        echo "Error: manifest not found: $manifest_path"
+        echo "Tip: run job 3 (Historical Backtesting) first to generate an evaluation manifest."
+        return
+      fi
+
+      if ! run_cmd uv run python -m src.score.backtest \
+          --manifest "$manifest_path" \
+          --output "$report_path" \
+          --k 25 50 100; then
+        echo "Result: FAILED"
+        return
+      fi
+
+      echo
+      echo "── Results ─────────────────────────────────────────────────────────────────────"
+      (cd "$PROJECT_ROOT" && uv run python -c "
+import json
+with open('$report_path') as f:
+    r = json.load(f)
+s = r.get('summary', {})
+p50 = s.get('precision_at_50', {}).get('mean')
+auroc = s.get('auroc', {}).get('mean')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50 (mean): {p50:.3f}  (target ≥ {target})  {status}' if isinstance(p50, float) else f'  Precision@50: {p50}')
+print(f'  AUROC        (mean): {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC: {auroc}')
+print(f'  Windows            : {s.get(\"window_count\", \"n/a\")}')
+")
+      ;;
+
+    3)
+      echo
+      echo "── Option 3: Public OpenSanctions integration test ──────────────────────────────"
+      local watchlist_path
+      watchlist_path="$(prompt "Watchlist parquet path" "data/processed/candidate_watchlist.parquet")"
+      local sanctions_db
+      sanctions_db="$(prompt "Public sanctions DuckDB path" "data/processed/public_eval.duckdb")"
+
+      local prepare_flag=""
+      if [[ ! -f "$PROJECT_ROOT/$sanctions_db" ]]; then
+        echo "Warning: $sanctions_db not found."
+        if prompt_yes_no "Auto-prepare sanctions DB now (downloads ~150 MB)" "true"; then
+          prepare_flag="1"
+        else
+          echo "Aborted — run job 9 (Prepare Sanctions DB) first."
+          return
+        fi
+      fi
+
+      echo
+      echo "── Summary (Precision@50 quick check) ──────────────────────────────────────────"
+      local tmp_metrics
+      tmp_metrics="$(mktemp /tmp/arktrace_metrics_XXXXXX.json)"
+      if (cd "$PROJECT_ROOT" && uv run python -m src.score.validate \
+            --db "data/processed/mpol.duckdb" \
+            --watchlist "$watchlist_path" \
+            --output "$tmp_metrics") >/dev/null 2>&1; then
+        (cd "$PROJECT_ROOT" && uv run python -c "
+import json
+with open('$tmp_metrics') as f:
+    m = json.load(f)
+p50   = m.get('precision_at_50', 'n/a')
+r200  = m.get('recall_at_200', 'n/a')
+auroc = m.get('auroc', 'n/a')
+total = m.get('candidate_count', 'n/a')
+pos   = m.get('positive_count', 'n/a')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50  : {p50:.3f}  (target ≥ {target})  {status}' if isinstance(p50, float) else f'  Precision@50 : {p50}')
+print(f'  Recall@200    : {r200:.3f}' if isinstance(r200, float) else f'  Recall@200   : {r200}')
+print(f'  AUROC         : {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC        : {auroc}')
+print(f'  Candidates    : {total}  (OFAC positives: {pos})')
+if pos == 0:
+    print()
+    print('  ⚠️  No OFAC positives found — watchlist is likely demo/synthetic data.')
+    print('     Run job 1 (Full Screening) with real AIS + sanctions data for a meaningful score.')
+")
+      else
+        echo "  (skipped — DB not available or validate failed)"
+      fi
+      rm -f "$tmp_metrics"
+
+      echo
+      echo "── Full integration test (pytest) ──────────────────────────────────────────────"
+      if ! (cd "$PROJECT_ROOT" && env RUN_PUBLIC_DATA_TESTS=1 \
+            PUBLIC_TEST_WATCHLIST="$watchlist_path" \
+            PUBLIC_SANCTIONS_DB="$sanctions_db" \
+            PREPARE_PUBLIC_DATA_IF_MISSING="${prepare_flag:-0}" \
+            uv run pytest tests/test_public_data_backtest_integration.py -v -s); then
+        echo "Result: FAILED"
+        return
+      fi
+
+      echo "Result: SUCCESS"
+      ;;
+
+    *)
+      echo "Invalid selection"
+      ;;
+  esac
+}
+
 run_ingest_custom_feeds() {
   echo
   echo "[15] Ingest custom feed drop-ins (_inputs/custom_feeds/)"
@@ -701,6 +873,376 @@ run_seed_dev_data() {
   print_watchlist_summary "$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
 }
 
+run_download_ais_marine_cadastre() {
+  echo
+  echo "[17] Download & Ingest Marine Cadastre AIS (NOAA — free, US coastal waters)"
+  echo
+  echo "  Marine Cadastre publishes annual AIS archives for US coastal waters."
+  echo "  Files are ~1–4 GB zipped. Already-downloaded archives are skipped."
+  echo
+  echo "  ⚠️  Coverage is US coastal only — not Singapore/Malacca."
+  echo "      Use bbox preset 'us-gulf' or 'us-east' to get real rows."
+  echo "      Singapore preset will return 0 rows from this source."
+  echo
+
+  local year
+  year="$(prompt "Year to download" "2023")"
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
+  echo
+  echo "  Bounding box presets:"
+  echo "    1) Singapore / Malacca (default arktrace AOI — 0 rows from MarineCadastre)"
+  echo "    2) US Gulf of Mexico   (lat 18-32, lon -98 to -80) — good for tanker traffic"
+  echo "    3) US East Coast       (lat 24-46, lon -82 to -65)"
+  echo "    4) Global              (no filter — loads everything, very large)"
+  echo "    5) Custom"
+  echo
+  local bbox_choice
+  read -r -p "  Choose bbox [2]: " bbox_choice
+  bbox_choice="${bbox_choice:-2}"
+
+  local bbox_args=()
+  case "$bbox_choice" in
+    1) bbox_args=(--bbox -5 92 22 122) ;;
+    2) bbox_args=(--bbox 18 -98 32 -80) ;;
+    3) bbox_args=(--bbox 24 -82 46 -65) ;;
+    4) ;;  # no --bbox = global
+    5)
+      local lat_min lon_min lat_max lon_max
+      lat_min="$(prompt "lat_min" "-90")"
+      lon_min="$(prompt "lon_min" "-180")"
+      lat_max="$(prompt "lat_max" "90")"
+      lon_max="$(prompt "lon_max" "180")"
+      bbox_args=(--bbox "$lat_min" "$lon_min" "$lat_max" "$lon_max")
+      ;;
+    *)
+      echo "Invalid selection — using US Gulf of Mexico"
+      bbox_args=(--bbox 18 -98 32 -80)
+      ;;
+  esac
+
+  echo
+  echo "── Downloading and ingesting year $year ────────────────────────────────────────"
+  if ! run_cmd uv run python -m src.ingest.marine_cadastre \
+      --year "$year" \
+      --db "$db_path" \
+      "${bbox_args[@]+"${bbox_args[@]}"}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+
+  if ! prompt_yes_no "Run feature matrix + scoring now to measure Precision@50?" "true"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python -m src.score.watchlist \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (scoring)"
+    return
+  fi
+
+  echo
+  echo "── Precision@50 (OFAC validate) ───────────────────────────────────────────────"
+  local tmp_metrics
+  tmp_metrics="$(mktemp /tmp/arktrace_metrics_XXXXXX.json)"
+  if (cd "$PROJECT_ROOT" && uv run python -m src.score.validate \
+        --db "$db_path" \
+        --watchlist "$watchlist_path" \
+        --output "$tmp_metrics") >/dev/null 2>&1; then
+    (cd "$PROJECT_ROOT" && uv run python -c "
+import json
+with open('$tmp_metrics') as f:
+    m = json.load(f)
+p50   = m.get('precision_at_50', 'n/a')
+r200  = m.get('recall_at_200', 'n/a')
+auroc = m.get('auroc', 'n/a')
+total = m.get('candidate_count', 'n/a')
+pos   = m.get('positive_count', 'n/a')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50  : {p50:.3f}  (target ≥ {target})  {status}' if isinstance(p50, float) else f'  Precision@50 : {p50}')
+print(f'  Recall@200    : {r200:.3f}' if isinstance(r200, float) else f'  Recall@200   : {r200}')
+print(f'  AUROC         : {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC        : {auroc}')
+print(f'  Candidates    : {total}  (OFAC positives: {pos})')
+if pos == 0:
+    print()
+    print('  ⚠️  No OFAC positives matched. OFAC vessels are mostly Middle East/Asia flagged —')
+    print('     US coastal AIS data rarely overlaps. Try AISHub for Singapore/Malacca data.')
+")
+  fi
+  rm -f "$tmp_metrics"
+  print_watchlist_summary "$watchlist_path"
+}
+
+run_fetch_aishub() {
+  echo
+  echo "[18] Fetch AISHub Live AIS — Singapore / Malacca Strait"
+  echo
+  echo "  AISHub (aishub.net) provides free live vessel positions via HTTP API."
+  echo "  Registration required: https://www.aishub.net/join-us"
+  echo "  Set AISHUB_USERNAME in .env or enter it below."
+  echo
+
+  local username
+  username="${AISHUB_USERNAME:-}"
+  if [[ -z "$username" ]]; then
+    username="$(prompt "AISHub username")"
+  else
+    echo "  Using AISHUB_USERNAME from environment: $username"
+  fi
+
+  if [[ -z "$username" ]]; then
+    echo "Error: username required."
+    return
+  fi
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
+  echo
+  echo "  Bounding box presets:"
+  echo "    1) Singapore / Malacca Strait  (lat -2–8, lon 98–110)  [default]"
+  echo "    2) Strait of Singapore only    (lat 1.0–1.5, lon 103.5–104.5)"
+  echo "    3) Custom"
+  echo
+  local bbox_choice
+  read -r -p "  Choose bbox [1]: " bbox_choice
+  bbox_choice="${bbox_choice:-1}"
+
+  local bbox_args=()
+  case "$bbox_choice" in
+    1) bbox_args=(--bbox -2 98 8 110) ;;
+    2) bbox_args=(--bbox 1.0 103.5 1.5 104.5) ;;
+    3)
+      local lat_min lon_min lat_max lon_max
+      lat_min="$(prompt "lat_min" "-2")"
+      lon_min="$(prompt "lon_min" "98")"
+      lat_max="$(prompt "lat_max" "8")"
+      lon_max="$(prompt "lon_max" "110")"
+      bbox_args=(--bbox "$lat_min" "$lon_min" "$lat_max" "$lon_max")
+      ;;
+    *)
+      echo "Invalid — using Singapore / Malacca default"
+      bbox_args=(--bbox -2 98 8 110)
+      ;;
+  esac
+
+  echo
+  echo "── Fetching live positions from AISHub ─────────────────────────────────────────"
+  if ! run_cmd uv run python -m src.ingest.aishub \
+      --username "$username" \
+      --db "$db_path" \
+      "${bbox_args[@]+"${bbox_args[@]}"}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+
+  if ! prompt_yes_no "Run feature matrix + scoring + Precision@50?" "true"; then
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python -m src.score.watchlist \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (scoring)"
+    return
+  fi
+
+  echo
+  echo "── Precision@50 ───────────────────────────────────────────────────────────────"
+  local tmp_metrics
+  tmp_metrics="$(mktemp /tmp/arktrace_metrics_XXXXXX.json)"
+  if (cd "$PROJECT_ROOT" && uv run python -m src.score.validate \
+        --db "$db_path" \
+        --watchlist "$watchlist_path" \
+        --output "$tmp_metrics") >/dev/null 2>&1; then
+    (cd "$PROJECT_ROOT" && uv run python -c "
+import json
+with open('$tmp_metrics') as f:
+    m = json.load(f)
+p50   = m.get('precision_at_50', 'n/a')
+r200  = m.get('recall_at_200', 'n/a')
+auroc = m.get('auroc', 'n/a')
+total = m.get('candidate_count', 'n/a')
+pos   = m.get('positive_count', 'n/a')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50  : {p50:.3f}  (target ≥ {target})  {status}' if isinstance(p50, float) else f'  Precision@50 : {p50}')
+print(f'  Recall@200    : {r200:.3f}' if isinstance(r200, float) else f'  Recall@200   : {r200}')
+print(f'  AUROC         : {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC        : {auroc}')
+print(f'  Candidates    : {total}  (OFAC positives: {pos})')
+if pos == 0:
+    print()
+    print('  ⚠️  No OFAC positives matched yet — live data covers recent positions only.')
+    print('     Fetch repeatedly over time to build up history, then re-score.')
+")
+  fi
+  rm -f "$tmp_metrics"
+  print_watchlist_summary "$watchlist_path"
+}
+
+run_fetch_aisstream() {
+  echo
+  echo "[19] Fetch aisstream.io Live AIS — Singapore / Malacca Strait"
+  echo
+  echo "  aisstream.io is a free real-time AIS WebSocket stream (no equipment required)."
+  echo "  Register instantly at https://aisstream.io to get an API key."
+  echo "  Set AISSTREAM_API_KEY in .env or enter it below."
+  echo
+  echo "  ⚠️  Live data only — no historical. Run on a schedule to build up history."
+  echo "     Tip: add to crontab to fetch every 30 min automatically."
+  echo
+
+  if [[ -z "${AISSTREAM_API_KEY:-}" ]]; then
+    echo "Error: AISSTREAM_API_KEY not set. Add it to .env or export it."
+    echo "  Register free at https://aisstream.io"
+    return
+  fi
+  echo "  Using AISSTREAM_API_KEY from environment."
+
+  local db_path
+  db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
+
+  local duration
+  duration="$(prompt "Collection duration seconds" "300")"
+
+  echo
+  echo "  Bounding box presets:"
+  echo "    1) Singapore / Malacca Strait  (lat -2–8, lon 98–110)  [default]"
+  echo "    2) Strait of Singapore only    (lat 1.0–1.5, lon 103.5–104.5)"
+  echo "    3) Custom"
+  echo
+  local bbox_choice
+  read -r -p "  Choose bbox [1]: " bbox_choice
+  bbox_choice="${bbox_choice:-1}"
+
+  local bbox_args=()
+  case "$bbox_choice" in
+    1) bbox_args=(--bbox -2 98 8 110) ;;
+    2) bbox_args=(--bbox 1.0 103.5 1.5 104.5) ;;
+    3)
+      local lat_min lon_min lat_max lon_max
+      lat_min="$(prompt "lat_min" "-2")"
+      lon_min="$(prompt "lon_min" "98")"
+      lat_max="$(prompt "lat_max" "8")"
+      lon_max="$(prompt "lon_max" "110")"
+      bbox_args=(--bbox "$lat_min" "$lon_min" "$lat_max" "$lon_max")
+      ;;
+    *)
+      echo "Invalid — using Singapore / Malacca default"
+      bbox_args=(--bbox -2 98 8 110)
+      ;;
+  esac
+
+  echo
+  echo "── Collecting live AIS from aisstream.io ───────────────────────────────────────"
+  if ! run_cmd uv run python -m src.ingest.ais_stream \
+      --db "$db_path" \
+      --duration "$duration" \
+      "${bbox_args[@]+"${bbox_args[@]}"}"; then
+    echo "Result: FAILED"
+    return
+  fi
+
+  echo "Result: SUCCESS"
+
+  echo
+  local total_rows
+  total_rows="$(cd "$PROJECT_ROOT" && uv run python -c "
+import duckdb
+con = duckdb.connect('$db_path', read_only=True)
+n = con.execute('SELECT count(*) FROM ais_positions').fetchone()[0]
+v = con.execute('SELECT count(DISTINCT mmsi) FROM ais_positions').fetchone()[0]
+con.close()
+print(f'  Total positions in DB : {n}')
+print(f'  Unique vessels        : {v}')
+" 2>/dev/null)"
+  echo "$total_rows"
+
+  if ! prompt_yes_no "Run feature matrix + scoring + Precision@50?" "false"; then
+    echo
+    echo "  Tip: fetch a few more times first to build up position history, then score."
+    echo "  Add to crontab:  */30 * * * * cd $PROJECT_ROOT && uv run python -m src.ingest.ais_stream --db $db_path --duration 300 ${bbox_args[*]+"${bbox_args[*]}"}"
+    return
+  fi
+
+  echo
+  echo "── Building feature matrix ────────────────────────────────────────────────────"
+  if ! run_cmd uv run python src/features/build_matrix.py --db "$db_path" --skip-graph; then
+    echo "Result: FAILED (build_matrix)"
+    return
+  fi
+
+  echo
+  echo "── Composite scoring + watchlist ──────────────────────────────────────────────"
+  local watchlist_path="$PROJECT_ROOT/data/processed/candidate_watchlist.parquet"
+  if ! run_cmd uv run python -m src.score.watchlist \
+      --db "$db_path" \
+      --output "$watchlist_path"; then
+    echo "Result: FAILED (scoring)"
+    return
+  fi
+
+  echo
+  echo "── Precision@50 ───────────────────────────────────────────────────────────────"
+  local tmp_metrics
+  tmp_metrics="$(mktemp /tmp/arktrace_metrics_XXXXXX.json)"
+  if (cd "$PROJECT_ROOT" && uv run python -m src.score.validate \
+        --db "$db_path" \
+        --watchlist "$watchlist_path" \
+        --output "$tmp_metrics") >/dev/null 2>&1; then
+    (cd "$PROJECT_ROOT" && uv run python -c "
+import json
+with open('$tmp_metrics') as f:
+    m = json.load(f)
+p50   = m.get('precision_at_50', 'n/a')
+r200  = m.get('recall_at_200', 'n/a')
+auroc = m.get('auroc', 'n/a')
+total = m.get('candidate_count', 'n/a')
+pos   = m.get('positive_count', 'n/a')
+target = 0.68
+status = '✅ PASS' if isinstance(p50, float) and p50 >= target else '❌ BELOW TARGET'
+print(f'  Precision@50  : {p50:.3f}  (target ≥ {target})  {status}' if isinstance(p50, float) else f'  Precision@50 : {p50}')
+print(f'  Recall@200    : {r200:.3f}' if isinstance(r200, float) else f'  Recall@200   : {r200}')
+print(f'  AUROC         : {auroc:.3f}' if isinstance(auroc, float) else f'  AUROC        : {auroc}')
+print(f'  Candidates    : {total}  (OFAC positives: {pos})')
+if pos == 0:
+    print()
+    print('  ⚠️  No OFAC positives yet — need more position history.')
+    print('     Run job 19 a few more times or set up the cron schedule.')
+")
+  fi
+  rm -f "$tmp_metrics"
+  print_watchlist_summary "$watchlist_path"
+}
+
 main_menu() {
   while true; do
     echo
@@ -802,6 +1344,31 @@ main_menu() {
     echo "           lists without writing any ingestion code"
     echo "      Who: analyst, developer, data engineer"
     echo
+    echo "16) Precision@50 Verification"
+    echo "     What: verify scoring model quality after a parameter change; three levels:"
+    echo "           1-Quick (re-score + OFAC validate), 2-Full (backtest manifest),"
+    echo "           3-Public (OpenSanctions pytest integration test)"
+    echo "     When: after changing scoring weights, contamination, or blend ratio (#186)"
+    echo "      Who: ML engineer, data scientist"
+    echo
+    echo "17) Download & Ingest Marine Cadastre AIS"
+    echo "     What: download a free NOAA annual AIS archive, filter to a bbox, ingest into"
+    echo "           DuckDB, then optionally score and measure Precision@50"
+    echo "     When: getting real AIS data without a commercial provider subscription"
+    echo "      Who: developer, data scientist"
+    echo
+    echo "18) Fetch AISHub Live AIS — Singapore / Malacca Strait"
+    echo "     What: pull live vessel positions from AISHub API for Singapore/Malacca bbox;"
+    echo "           ingest into DuckDB then optionally score and measure Precision@50"
+    echo "     When: getting real Singapore Strait AIS data (free, requires aishub.net account)"
+    echo "      Who: developer, data scientist"
+    echo
+    echo "19) Fetch aisstream.io Live AIS — Singapore / Malacca Strait"
+    echo "     What: collect live AIS via WebSocket from aisstream.io for a configurable"
+    echo "           duration; ingest into DuckDB; optionally score + Precision@50"
+    echo "     When: getting real AIS data immediately (free, instant signup, no equipment)"
+    echo "      Who: developer, data scientist"
+    echo
     echo "────────────────────────────────────────────────────────────────────────────────"
     echo "q) Quit"
 
@@ -825,6 +1392,10 @@ main_menu() {
       13) run_ingest_eo_csv ;;
       14) run_ingest_ais_csv ;;
       15) run_ingest_custom_feeds ;;
+      16) run_precision_verification ;;
+      17) run_download_ais_marine_cadastre ;;
+      18) run_fetch_aishub ;;
+      19) run_fetch_aisstream ;;
       q|quit|exit)
         echo "Bye"
         return
@@ -833,6 +1404,9 @@ main_menu() {
         echo "Invalid selection"
         ;;
     esac
+
+    echo
+    read -r -p "Press Enter to return to menu..." _
   done
 }
 
