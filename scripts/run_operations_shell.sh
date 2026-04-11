@@ -1120,18 +1120,12 @@ run_fetch_aisstream() {
   echo "     Tip: add to crontab to fetch every 30 min automatically."
   echo
 
-  local api_key
-  api_key="${AISSTREAM_API_KEY:-}"
-  if [[ -z "$api_key" ]]; then
-    api_key="$(prompt "aisstream.io API key")"
-  else
-    echo "  Using AISSTREAM_API_KEY from environment."
-  fi
-
-  if [[ -z "$api_key" ]]; then
-    echo "Error: API key required."
+  if [[ -z "${AISSTREAM_API_KEY:-}" ]]; then
+    echo "Error: AISSTREAM_API_KEY not set. Add it to .env or export it."
+    echo "  Register free at https://aisstream.io"
     return
   fi
+  echo "  Using AISSTREAM_API_KEY from environment."
 
   local db_path
   db_path="$(prompt "DuckDB path" "data/processed/mpol.duckdb")"
@@ -1169,8 +1163,7 @@ run_fetch_aisstream() {
 
   echo
   echo "── Collecting live AIS from aisstream.io ───────────────────────────────────────"
-  if ! run_cmd uv run python -m src.ingest.aisstream \
-      --api-key "$api_key" \
+  if ! run_cmd uv run python -m src.ingest.ais_stream \
       --db "$db_path" \
       --duration "$duration" \
       "${bbox_args[@]+"${bbox_args[@]}"}"; then
@@ -1196,7 +1189,7 @@ print(f'  Unique vessels        : {v}')
   if ! prompt_yes_no "Run feature matrix + scoring + Precision@50?" "false"; then
     echo
     echo "  Tip: fetch a few more times first to build up position history, then score."
-    echo "  Add to crontab:  */30 * * * * cd $PROJECT_ROOT && uv run python -m src.ingest.aisstream --api-key $api_key --db $db_path --duration 300 ${bbox_args[*]+"${bbox_args[*]}"}"
+    echo "  Add to crontab:  */30 * * * * cd $PROJECT_ROOT && uv run python -m src.ingest.ais_stream --db $db_path --duration 300 ${bbox_args[*]+"${bbox_args[*]}"}"
     return
   fi
 
