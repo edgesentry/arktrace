@@ -170,7 +170,7 @@ async def stream(
                 )
                 last_flush = loop.time()
                 session_inserted = 0
-                backoff = BACKOFF_INITIAL  # reset on successful connect
+                messages_received = 0
 
                 while not stop_event.is_set():
                     if deadline is not None and loop.time() >= deadline:
@@ -196,6 +196,10 @@ async def stream(
                     record = _parse_position_report(msg)
                     if record is None:
                         continue
+
+                    messages_received += 1
+                    if messages_received == 1:
+                        backoff = BACKOFF_INITIAL  # reset only after first real message
 
                     batch.append(record)
                     now = loop.time()
