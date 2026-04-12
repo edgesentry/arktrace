@@ -3,7 +3,7 @@
 #
 # Start arktrace in native macOS dev mode.
 #
-#   • Infra (MinIO) runs in Docker via docker-compose.infra.yml
+#   • Data is read from local disk (pull from R2 first if not present)
 #   • mlx-lm runs as a local OpenAI-compatible server (Apple Silicon, Metal)
 #   • Dashboard runs natively on the host — connects to the mlx-lm server
 #
@@ -12,15 +12,17 @@
 #
 # Usage:
 #   bash scripts/run_app.sh
+#   bash scripts/run_app.sh --region japan
 #   bash scripts/run_app.sh --model mlx-community/Qwen2.5-7B-Instruct-4bit
 #   bash scripts/run_app.sh --provider anthropic   # skip local LLM entirely
 #
 # Options:
+#   --region REGION   Region to serve: singapore|japan|middleeast|europe|gulf
+#                     (default: singapore)
 #   --model MODEL     mlx-community model ID or local path (overrides LLM_MODEL)
 #   --provider NAME   LLM provider: openai (mlx-lm) | anthropic (overrides LLM_PROVIDER)
 #   --port PORT       Port for uvicorn (default: 8000)
 #   --llm-port PORT   Port for mlx-lm server (default: 8080)
-#   --no-infra        Skip starting Docker infra (assumes MinIO is already up)
 #   --no-llm          Skip starting mlx-lm server (assumes it is already running)
 #   --help            Show this message
 
@@ -28,23 +30,22 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-COMPOSE_FILE="${REPO_ROOT}/docker-compose.infra.yml"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 PORT="${PORT:-8000}"
 LLM_PORT="${LLM_PORT:-8080}"
-START_INFRA=true
+REGION="singapore"
 START_LLM=true
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --model)    export LLM_MODEL="$2";    shift 2 ;;
+    --region)   REGION="$2";             shift 2 ;;
+    --model)    export LLM_MODEL="$2";   shift 2 ;;
     --provider) export LLM_PROVIDER="$2"; shift 2 ;;
-    --port)     PORT="$2";                shift 2 ;;
-    --llm-port) LLM_PORT="$2";            shift 2 ;;
-    --no-infra) START_INFRA=false;        shift   ;;
-    --no-llm)   START_LLM=false;          shift   ;;
+    --port)     PORT="$2";               shift 2 ;;
+    --llm-port) LLM_PORT="$2";           shift 2 ;;
+    --no-llm)   START_LLM=false;         shift   ;;
     --help|-h)
       sed -n '/^# Usage/,/^[^#]/{ /^[^#]/d; s/^# \{0,2\}//; p }' "$0"
       exit 0
@@ -52,6 +53,22 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
+
+# ── Validate region and set DB path ───────────────────────────────────────────
+case "${REGION}" in
+  singapore)  DB_FILENAME="singapore.duckdb" ;;
+  japan)      DB_FILENAME="japansea.duckdb" ;;
+  middleeast) DB_FILENAME="middleeast.duckdb" ;;
+  europe)     DB_FILENAME="europe.duckdb" ;;
+  gulf)       DB_FILENAME="gulf.duckdb" ;;
+  *)
+    echo "Error: unknown region '${REGION}'." >&2
+    echo "Valid regions: singapore, japan, middleeast, europe, gulf" >&2
+    exit 1
+    ;;
+esac
+
+export DB_PATH="${REPO_ROOT}/data/processed/${DB_FILENAME}"
 
 # ── Load .env ─────────────────────────────────────────────────────────────────
 if [[ -f "${REPO_ROOT}/.env" ]]; then
@@ -61,18 +78,11 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
   set +o allexport
 fi
 
-# ── Override S3 endpoint for host ─────────────────────────────────────────────
-export S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}"
-export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-minioadmin}"
-export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-minioadmin}"
-export AWS_REGION="${AWS_REGION:-us-east-1}"
-export S3_BUCKET="${S3_BUCKET:-arktrace}"
-
-# ── Start infra ────────────────────────────────────────────────────────────────
-if [[ "${START_INFRA}" == true ]]; then
-  echo "🐳 Starting infra (MinIO)…"
-  docker compose -f "${COMPOSE_FILE}" up -d
-  echo "   MinIO console → http://localhost:9001  (minioadmin / minioadmin)"
+# ── Check local data ──────────────────────────────────────────────────────────
+if [[ ! -f "${DB_PATH}" ]]; then
+  echo "⬇️  Local data not found for region '${REGION}' (${DB_PATH})."
+  echo "   Pulling from R2…"
+  uv run python "${SCRIPT_DIR}/sync_r2.py" pull --region "${REGION}"
   echo ""
 fi
 
@@ -119,10 +129,11 @@ fi
 
 # ── Print config summary ───────────────────────────────────────────────────────
 echo "🚀 Starting dashboard"
+echo "   Region        = ${REGION}"
+echo "   DB_PATH       = ${DB_PATH}"
 echo "   LLM_PROVIDER  = ${LLM_PROVIDER:-openai}"
 echo "   LLM_BASE_URL  = ${LLM_BASE_URL:-http://localhost:${LLM_PORT}/v1}"
 echo "   LLM_MODEL     = ${LLM_MODEL:-${MODEL}}"
-echo "   S3_ENDPOINT   = ${S3_ENDPOINT}"
 echo "   Dashboard     → http://localhost:${PORT}"
 echo ""
 

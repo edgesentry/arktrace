@@ -29,10 +29,8 @@ from src.api.llm import get_llm_client
 from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
 from src.storage.config import output_uri
 from src.storage.config import read_parquet as read_parquet_uri
+from src.storage.config import watchlist_uri
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
-    "candidate_watchlist.parquet"
-)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -94,7 +92,7 @@ class ChatRequest(BaseModel):
 
 def _watchlist_version() -> str:
     try:
-        return str(int(Path(DEFAULT_WATCHLIST_PATH).stat().st_mtime))
+        return str(int(Path(watchlist_uri()).stat().st_mtime))
     except OSError:
         return "0"
 
@@ -138,7 +136,7 @@ def _write_cache(key: str, mmsi: str | None, q_hash: str, version: str, response
 
 
 def _load_watchlist() -> pl.DataFrame:
-    df = read_parquet_uri(DEFAULT_WATCHLIST_PATH)
+    df = read_parquet_uri(watchlist_uri())
     if df is None:
         return pl.DataFrame()
     return df

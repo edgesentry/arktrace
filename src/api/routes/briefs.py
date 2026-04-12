@@ -17,11 +17,9 @@ from src.api.db import get_conn
 from src.api.llm import get_llm_client
 from src.ingest.gdelt import DEFAULT_LANCE_PATH, query_gdelt_context
 from src.storage.config import output_uri
+from src.storage.config import watchlist_uri
 from src.storage.config import read_parquet as read_parquet_uri
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
-    "candidate_watchlist.parquet"
-)
 _DEFAULT_DB_PATH = "data/processed/mpol.duckdb"
 BRIEF_CONFIDENCE_THRESHOLD = float(os.getenv("BRIEF_CONFIDENCE_THRESHOLD", "0.7"))
 
@@ -79,7 +77,7 @@ _DISPATCH_USER_TEMPLATE = (
 
 
 def _load_vessel(mmsi: str) -> dict | None:
-    df = read_parquet_uri(DEFAULT_WATCHLIST_PATH)
+    df = read_parquet_uri(watchlist_uri())
     if df is None:
         return None
     df = df.filter(pl.col("mmsi") == mmsi)
@@ -139,7 +137,7 @@ def _format_gdelt(events: list[dict]) -> str:
 
 def _watchlist_version() -> str:
     """Return a cache key based on watchlist file modification time."""
-    path = DEFAULT_WATCHLIST_PATH
+    path = watchlist_uri()
     try:
         return str(int(Path(path).stat().st_mtime))
     except OSError:
