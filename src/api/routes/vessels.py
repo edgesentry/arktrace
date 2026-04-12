@@ -12,12 +12,9 @@ from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from src.analysis.causal import score_unknown_unknowns
-from src.storage.config import output_uri
+from src.storage.config import output_uri, watchlist_uri
 from src.storage.config import read_parquet as read_parquet_uri
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
-    "candidate_watchlist.parquet"
-)
 DEFAULT_VALIDATION_PATH = os.getenv(
     "VALIDATION_METRICS_PATH", "data/processed/validation_metrics.json"
 )
@@ -29,7 +26,7 @@ router = APIRouter()
 
 
 def _load_watchlist() -> pl.DataFrame:
-    df = read_parquet_uri(DEFAULT_WATCHLIST_PATH)
+    df = read_parquet_uri(watchlist_uri())
     if df is None:
         return pl.DataFrame()
     return df

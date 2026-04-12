@@ -1,22 +1,4 @@
 services:
-  minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    container_name: mpol-minio
-    ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # MinIO console
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   # Downloads the GGUF model on first run; skips if already present in the volume.
   # Set MODEL_NAME to override the default (phi-4-mini-it, MIT, ~2.4 GB).
   # Set HF_TOKEN if the model repo is gated.
@@ -33,19 +15,6 @@ services:
       HF_TOKEN: ${HF_TOKEN:-}
     command: ["python", "scripts/download_model.py"]
 
-  # Creates the default bucket on first run
-  minio_init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
-    container_name: mpol-minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      sh -c "
-        mc alias set local http://minio:9000 minioadmin minioadmin &&
-        mc mb --ignore-existing local/arktrace
-      "
-
   dashboard:
     build: .
     container_name: mpol-dashboard
@@ -57,21 +26,13 @@ services:
       VALIDATION_METRICS_PATH: data/processed/validation_metrics.json
       ALERT_CONFIDENCE_THRESHOLD: "0.75"
       ALERT_POLL_INTERVAL: "60"
-      # S3-compatible object storage (MinIO for local, real S3/R2/GCS in cloud)
-      S3_BUCKET: ${S3_BUCKET:-arktrace}
-      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
       # Local LLM — defaults to llamacpp with the model downloaded by model_init
       LLM_PROVIDER: ${LLM_PROVIDER:-llamacpp}
       LLAMACPP_MODEL_PATH: ${LLAMACPP_MODEL_PATH:-/app/models/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf}
     volumes:
-      - ./data:/app/data   # DuckDB working file stays local
+      - ./data:/app/data   # DuckDB + processed data (pulled from R2 via sync_r2.py pull)
       - models:/app/models  # GGUF model downloaded by model_init
     depends_on:
-      minio_init:
-        condition: service_completed_successfully
       model_init:
         condition: service_completed_successfully
     command: ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]
@@ -80,18 +41,8 @@ services:
     build: .
     env_file:
       - .env
-    environment:
-      # S3-compatible object storage
-      S3_BUCKET: ${S3_BUCKET:-arktrace}
-      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
     volumes:
-      - ./data:/app/data   # DuckDB working file stays local
-    depends_on:
-      minio_init:
-        condition: service_completed_successfully
+      - ./data:/app/data
     profiles:
       - pipeline
     command: >
@@ -102,5 +53,4 @@ services:
       ${PIPELINE_STREAM_DURATION:+--stream-duration ${PIPELINE_STREAM_DURATION}}
 
 volumes:
-  minio_data:
   models:  # GGUF model files — persists across rebuilds

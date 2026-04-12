@@ -14,6 +14,7 @@ from src.api.routes.chat import router as chat_router
 from src.api.routes.reviews import router as reviews_router
 from src.api.routes.vessels import router as vessels_router
 from src.ingest.schema import DEFAULT_DB_PATH, init_schema
+from src.storage.bootstrap import maybe_pull
 
 _TEMPLATE_DIR = Path(__file__).parent.parent / "viz" / "templates"
 
@@ -23,6 +24,7 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     def _init_db() -> None:
+        maybe_pull()
         db_path = os.getenv("DB_PATH", DEFAULT_DB_PATH)
         init_schema(db_path)
 

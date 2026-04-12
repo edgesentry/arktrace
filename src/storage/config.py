@@ -1,13 +1,16 @@
 """Centralised storage configuration for local and S3-compatible backends.
 
-When S3_BUCKET is set, all storage URIs resolve to s3://<bucket>/...
-When it is not set, local paths under data/processed/ are used unchanged,
-so the entire pipeline works without any S3 configuration.
+By default (and for the typical user who pulls data via sync_r2.py) the app
+reads from local disk under data/processed/.  S3 mode is only enabled when
+USE_S3=1 is explicitly set, allowing R2 credentials to live in .env for
+push/pull without accidentally routing all app reads to the remote bucket.
 
 Environment variables
 ---------------------
-S3_BUCKET             Bucket name (enables S3 mode when set)
-S3_ENDPOINT           Custom endpoint URL, e.g. http://minio:9000 (MinIO)
+USE_S3                Set to "1" or "true" to route all data reads/writes to S3.
+                      Default: off (local disk).
+S3_BUCKET             Bucket name (required when USE_S3=1)
+S3_ENDPOINT           Custom endpoint URL for R2 / MinIO
 AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
 AWS_REGION            Default: us-east-1
@@ -29,12 +32,23 @@ if TYPE_CHECKING:
 
 
 def is_s3() -> bool:
-    """True when S3_BUCKET is set in the environment."""
-    return bool(os.getenv("S3_BUCKET"))
+    """True only when USE_S3=1 is explicitly set.
+
+    R2 credentials (S3_BUCKET, AWS_ACCESS_KEY_ID, etc.) are used by sync_r2.py
+    for push/pull but must not activate S3 mode for the app itself — the app
+    always reads from local disk unless USE_S3 is explicitly opted in.
+    """
+    val = os.getenv("USE_S3", "0").lower()
+    return val in ("1", "true", "yes")
+
+
+_DEFAULT_BUCKET = "arktrace-public"
+_DEFAULT_ENDPOINT = "https://b8a0b09feb89390fb6e8cf4ef9294f48.r2.cloudflarestorage.com"
+_DEFAULT_REGION = "auto"
 
 
 def _bucket() -> str:
-    return os.environ["S3_BUCKET"]
+    return os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
 
 
 # ---------------------------------------------------------------------------
@@ -49,9 +63,9 @@ def polars_storage_options() -> dict[str, str] | None:
     opts: dict[str, str] = {
         "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID", ""),
         "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY", ""),
-        "aws_region": os.getenv("AWS_REGION", "us-east-1"),
+        "aws_region": os.getenv("AWS_REGION", _DEFAULT_REGION),
     }
-    endpoint = os.getenv("S3_ENDPOINT")
+    endpoint = os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
     if endpoint:
         opts["aws_endpoint_url"] = endpoint
         opts["aws_allow_http"] = "true"
@@ -65,9 +79,9 @@ def lance_storage_options() -> dict[str, str] | None:
     opts: dict[str, str] = {
         "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID", ""),
         "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY", ""),
-        "aws_region": os.getenv("AWS_REGION", "us-east-1"),
+        "aws_region": os.getenv("AWS_REGION", _DEFAULT_REGION),
     }
-    endpoint = os.getenv("S3_ENDPOINT")
+    endpoint = os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
     if endpoint:
         opts["aws_endpoint"] = endpoint
         opts["aws_allow_http"] = "true"
@@ -114,6 +128,36 @@ def output_uri(filename: str) -> str:
     return os.path.join(data_dir, filename)
 
 
+# Maps DuckDB filename stem → region watchlist filename.
+# Mirrors the RegionPreset definitions in scripts/run_pipeline.py.
+_DB_STEM_TO_WATCHLIST: dict[str, str] = {
+    "singapore": "singapore_watchlist.parquet",
+    "japansea": "japansea_watchlist.parquet",
+    "middleeast": "middleeast_watchlist.parquet",
+    "europe": "europe_watchlist.parquet",
+    "gulf": "gulf_watchlist.parquet",
+}
+
+
+def watchlist_uri() -> str:
+    """Resolve the watchlist path for the currently configured region.
+
+    Priority:
+      1. ``WATCHLIST_OUTPUT_PATH`` env var (explicit override)
+      2. Derived from ``DB_PATH`` stem — e.g. ``singapore.duckdb`` → ``singapore_watchlist.parquet``
+      3. Default ``candidate_watchlist.parquet``
+
+    Called at request time (not at import time) so that ``DB_PATH`` changes
+    between test runs or region switches are picked up automatically.
+    """
+    explicit = os.getenv("WATCHLIST_OUTPUT_PATH")
+    if explicit:
+        return explicit
+    db_stem = Path(os.getenv("DB_PATH", "data/processed/mpol.duckdb")).stem
+    filename = _DB_STEM_TO_WATCHLIST.get(db_stem, "candidate_watchlist.parquet")
+    return output_uri(filename)
+
+
 # ---------------------------------------------------------------------------
 # Parquet I/O helpers
 # ---------------------------------------------------------------------------
@@ -136,11 +180,11 @@ def _write_parquet_s3(df: pl.DataFrame, uri: str) -> None:
     without_scheme = uri[len("s3://") :]
     bucket, _, key = without_scheme.partition("/")
 
-    endpoint = os.getenv("S3_ENDPOINT", "")
+    endpoint = os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
     fs_kwargs: dict[str, str] = {
         "access_key": os.getenv("AWS_ACCESS_KEY_ID", ""),
         "secret_key": os.getenv("AWS_SECRET_ACCESS_KEY", ""),
-        "region": os.getenv("AWS_REGION", "us-east-1"),
+        "region": os.getenv("AWS_REGION", _DEFAULT_REGION),
     }
     if endpoint:
         fs_kwargs["endpoint_override"] = endpoint.split("://", 1)[-1]

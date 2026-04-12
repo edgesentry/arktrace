@@ -10,12 +10,9 @@ import polars as pl
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from src.storage.config import output_uri
 from src.storage.config import read_parquet as read_parquet_uri
+from src.storage.config import watchlist_uri
 
-DEFAULT_WATCHLIST_PATH = os.getenv("WATCHLIST_OUTPUT_PATH") or output_uri(
-    "candidate_watchlist.parquet"
-)
 ALERT_THRESHOLD = float(os.getenv("ALERT_CONFIDENCE_THRESHOLD", "0.75"))
 POLL_INTERVAL_SECONDS = int(os.getenv("ALERT_POLL_INTERVAL", "60"))
 
@@ -27,7 +24,7 @@ async def _event_stream():
     seen: set[str] = set()
     while True:
         try:
-            df = read_parquet_uri(DEFAULT_WATCHLIST_PATH)
+            df = read_parquet_uri(watchlist_uri())
             if df is not None:
                 if not df.is_empty():
                     high = df.filter(pl.col("confidence") >= ALERT_THRESHOLD).with_columns(

@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/mpol.duckdb")
+DEFAULT_DB_PATH = os.getenv("DB_PATH", "data/processed/singapore.duckdb")
 
 
 def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
