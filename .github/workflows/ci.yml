@@ -90,6 +90,75 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  score_regression_gate:
+    name: Score regression gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Only run on PRs targeting main; skip on direct pushes to main (covered by
+    # public-backtest-integration.yml which runs the full multi-region batch).
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --group dev
+
+      - name: Pull public_eval.duckdb from R2
+        # Skip gracefully when R2 credentials are absent (e.g. forks).
+        # The backtest will still run using a freshly downloaded OpenSanctions
+        # JSONL if the DB is missing; if both are absent, --min-known-cases 5
+        # will cause the batch to surface a clear error rather than silently pass.
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ]; then
+            echo "[skip] R2 credentials absent — skipping pull-sanctions-db"
+          else
+            uv run python scripts/sync_r2.py pull-sanctions-db
+          fi
+
+      - name: Run Singapore pipeline (seed mode)
+        run: |
+          uv run python scripts/run_pipeline.py \
+            --region singapore \
+            --non-interactive \
+            --seed-dummy
+
+      - name: Run public backtest
+        run: |
+          uv run python scripts/run_public_backtest_batch.py \
+            --regions singapore \
+            --seed-dummy \
+            --min-known-cases 5
+
+      - name: Assert score regression bounds
+        id: regression_check
+        run: |
+          uv run python scripts/check_score_regression.py \
+            --summary data/processed/backtest_public_integration_summary.json \
+            --report  data/processed/backtest_report_public_integration.json \
+            | tee /tmp/regression_check_output.txt
+
+      - name: Upload regression check artefacts
+        if: always()
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808  # v4
+        with:
+          name: score-regression-gate-${{ github.sha }}
+          path: |
+            data/processed/backtest_public_integration_summary.json
+            data/processed/backtest_report_public_integration.json
+          if-no-files-found: warn
+
   license_check:
     name: OSS License Check
     runs-on: ubuntu-latest
