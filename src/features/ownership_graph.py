@@ -13,6 +13,7 @@ Usage:
 
 import os
 
+import duckdb
 import polars as pl
 from dotenv import load_dotenv
 
@@ -246,6 +247,51 @@ def _compute_sts_hub_degree(tables: dict) -> pl.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# DuckDB fallback for stale or incomplete Lance Graph
+# ---------------------------------------------------------------------------
+
+
+def _apply_direct_sanctions_fallback(sd_df: pl.DataFrame, db_path: str) -> pl.DataFrame:
+    """Override sanctions_distance=99 → 0 for vessels directly in sanctions_entities.
+
+    The Lance Graph is built once per pipeline run. If sanctions data was refreshed
+    after the graph was last written, or if an entity's FtM schema type prevented it
+    from being included in the SANCTIONED_BY edge set, its distance stays at 99 even
+    though its MMSI is plainly on a sanctions list.
+
+    This fallback does a live query against sanctions_entities (no graph traversal)
+    and corrects any vessel whose MMSI appears there directly.
+    """
+    if sd_df.is_empty():
+        return sd_df
+    try:
+        con = duckdb.connect(db_path, read_only=True)
+        try:
+            direct_mmsi: set[str] = set(
+                con.execute(
+                    "SELECT DISTINCT mmsi FROM sanctions_entities "
+                    "WHERE mmsi IS NOT NULL AND mmsi <> ''"
+                ).fetchdf()["mmsi"].tolist()
+            )
+        finally:
+            con.close()
+    except Exception:
+        return sd_df  # DB unavailable; keep graph-derived distances
+
+    if not direct_mmsi:
+        return sd_df
+
+    return sd_df.with_columns(
+        pl.when(
+            (pl.col("sanctions_distance") == MAX_HOPS) & pl.col("mmsi").is_in(direct_mmsi)
+        )
+        .then(pl.lit(0, dtype=pl.Int32))
+        .otherwise(pl.col("sanctions_distance"))
+        .alias("sanctions_distance")
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -258,6 +304,7 @@ def compute_ownership_graph_features(db_path: str) -> pl.DataFrame:
     tables = load_tables(db_path)
 
     sd_df = _compute_sanctions_distance(tables)
+    sd_df = _apply_direct_sanctions_fallback(sd_df, db_path)
 
     if sd_df.is_empty():
         return pl.DataFrame(
