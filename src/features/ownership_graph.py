@@ -271,7 +271,9 @@ def _apply_direct_sanctions_fallback(sd_df: pl.DataFrame, db_path: str) -> pl.Da
                 con.execute(
                     "SELECT DISTINCT mmsi FROM sanctions_entities "
                     "WHERE mmsi IS NOT NULL AND mmsi <> ''"
-                ).fetchdf()["mmsi"].tolist()
+                )
+                .fetchdf()["mmsi"]
+                .tolist()
             )
         finally:
             con.close()
@@ -282,9 +284,7 @@ def _apply_direct_sanctions_fallback(sd_df: pl.DataFrame, db_path: str) -> pl.Da
         return sd_df
 
     return sd_df.with_columns(
-        pl.when(
-            (pl.col("sanctions_distance") == MAX_HOPS) & pl.col("mmsi").is_in(direct_mmsi)
-        )
+        pl.when((pl.col("sanctions_distance") == MAX_HOPS) & pl.col("mmsi").is_in(direct_mmsi))
         .then(pl.lit(0, dtype=pl.Int32))
         .otherwise(pl.col("sanctions_distance"))
         .alias("sanctions_distance")

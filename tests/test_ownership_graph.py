@@ -75,9 +75,7 @@ def test_fallback_does_not_downgrade_existing_distance(tmp_db):
 
 def test_fallback_handles_empty_dataframe(tmp_db):
     """Empty input must pass through without error."""
-    sd_df = pl.DataFrame(
-        schema={"mmsi": pl.Utf8, "sanctions_distance": pl.Int32}
-    )
+    sd_df = pl.DataFrame(schema={"mmsi": pl.Utf8, "sanctions_distance": pl.Int32})
     result = _apply_direct_sanctions_fallback(sd_df, tmp_db)
     assert result.is_empty()
 
