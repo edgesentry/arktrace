@@ -4,6 +4,15 @@ set -u
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Load .env from project root so API keys (GFW_API_TOKEN, AISSTREAM_API_KEY, etc.)
+# are available without requiring the caller to export them beforehand.
+if [[ -f "$PROJECT_ROOT/.env" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$PROJECT_ROOT/.env"
+  set +a
+fi
+
 # Auto-detect MinIO running at localhost:9000 and configure S3 vars so
 # scripts will write to MinIO (where the dashboard reads from) rather than
 # the local filesystem.
