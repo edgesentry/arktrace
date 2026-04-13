@@ -484,8 +484,12 @@ def cmd_pull(args: argparse.Namespace) -> int:
     print(f"\nDone. {downloaded / 1_048_576:.1f} MB downloaded, extracted to {data_dir}/")
     print(f"Region(s): {', '.join(regions)}")
     print("\nOptional extras:")
-    print("  uv run python scripts/sync_r2.py pull-sanctions-db  # OpenSanctions DB for integration tests")
-    print("  uv run python scripts/sync_r2.py pull-gdelt         # GDELT news data (analyst briefs)")
+    print(
+        "  uv run python scripts/sync_r2.py pull-sanctions-db  # OpenSanctions DB for integration tests"
+    )
+    print(
+        "  uv run python scripts/sync_r2.py pull-gdelt         # GDELT news data (analyst briefs)"
+    )
     print("\nStart the app:")
     print(f"  DB_PATH={db_path} uv run uvicorn src.api.main:app --reload")
     print("  open http://localhost:8000")
@@ -653,9 +657,7 @@ def cmd_pull_sanctions_db(args: argparse.Namespace) -> int:
     downloaded = _download_file(fs, r2_path, local_path)
     print(f"Done. {downloaded / 1_048_576:.1f} MB downloaded to {local_path}")
     print("\nYou can now run the public-data integration test:")
-    print(
-        "  RUN_PUBLIC_DATA_TESTS=1 uv run pytest tests/test_public_data_backtest_integration.py"
-    )
+    print("  RUN_PUBLIC_DATA_TESTS=1 uv run pytest tests/test_public_data_backtest_integration.py")
     return 0
 
 
