@@ -3,7 +3,12 @@ from pathlib import Path
 
 import duckdb
 
-from src.ingest.sanctions import _flush_batch, _normalize_imo, load_jsonl_to_duckdb, parse_ftm_entity
+from src.ingest.sanctions import (
+    _flush_batch,
+    _normalize_imo,
+    load_jsonl_to_duckdb,
+    parse_ftm_entity,
+)
 
 # ---------------------------------------------------------------------------
 # parse_ftm_entity
