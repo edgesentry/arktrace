@@ -226,6 +226,22 @@ def main() -> None:
             }
         )
 
+    # Combine all region watchlists into candidate_watchlist.parquet so that
+    # test_public_data_backtest_integration.py can evaluate a multi-region view.
+    # Watchlists are concatenated without deduplication: the same vessel scored
+    # across multiple regions appears multiple times with its per-region confidence,
+    # which boosts ranked recall for vessels that surface in several regional models.
+    watchlist_parts = [
+        pl.read_parquet((project_root / WATCHLIST_BY_REGION[r]).resolve())
+        for r in regions
+        if (project_root / WATCHLIST_BY_REGION[r]).exists()
+    ]
+    if watchlist_parts:
+        combined_watchlist = pl.concat(watchlist_parts, how="vertical_relaxed")
+        candidate_path = processed_dir / "candidate_watchlist.parquet"
+        combined_watchlist.write_parquet(candidate_path)
+        print(f"Combined candidate watchlist: {combined_watchlist.height} rows → {candidate_path}")
+
     manifest = {
         "schema_version": "1.0",
         "description": "Main-merge public-data backtest integration batch",

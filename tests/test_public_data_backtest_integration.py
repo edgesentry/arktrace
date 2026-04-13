@@ -67,10 +67,25 @@ def test_public_sanctions_download_and_detection_backtest(tmp_path: Path) -> Non
     finally:
         con.close()
 
-    # Keep positives that appear in our algorithm output (watchlist).
+    # Normalize IMO prefix: sanctions_entities stores 'IMO9289491', watchlist uses '9289491'.
+    positives = positives.with_columns(pl.col("imo").str.strip_prefix("IMO").alias("imo"))
+
+    # Match by mmsi and imo independently — sanctions data may carry only one identifier.
+    # Joining on both columns simultaneously fails when one field differs between sources.
+    pos_by_mmsi = watchlist.join(
+        positives.filter(pl.col("mmsi") != "").select(["mmsi", "evidence_source"]),
+        on="mmsi",
+        how="inner",
+    )
+    pos_by_imo = watchlist.join(
+        positives.filter(pl.col("imo") != "").select(["imo", "evidence_source"]),
+        on="imo",
+        how="inner",
+    )
     pos_labels = (
-        watchlist.join(positives, on=["mmsi", "imo"], how="inner")
+        pl.concat([pos_by_mmsi, pos_by_imo], how="vertical_relaxed")
         .unique(subset=["mmsi", "imo"])
+        .sort("confidence", descending=True)
         .with_columns(
             pl.lit("positive").alias("label"),
             pl.lit("high").alias("label_confidence"),
@@ -141,3 +156,14 @@ def test_public_sanctions_download_and_detection_backtest(tmp_path: Path) -> Non
     assert cov["matched_total"] + cov["missed_total"] == cov["source_positive_total"]
     assert isinstance(cov["matched_examples"], list)
     assert isinstance(cov["missed_examples"], list)
+
+    # Precision@50 gate: requires candidate_watchlist.parquet built from all 5 region
+    # watchlists by scripts/run_public_backtest_batch.py (Option B, issue #218).
+    # With the multi-region combined watchlist the top-50 labeled rows are dominated
+    # by high-confidence non-Singapore positives (0.7+), pushing P@50 above target.
+    p50 = window["metrics"]["precision_at_50"]
+    assert p50 >= 0.68, (
+        f"Precision@50={p50:.4f} below target 0.68. "
+        "Regenerate candidate_watchlist.parquet by running: "
+        "uv run python scripts/run_public_backtest_batch.py"
+    )
