@@ -1,12 +1,21 @@
 """
-EO vessel detection ingestion — Global Fishing Watch Vessel Presence API.
+EO vessel detection ingestion — Global Fishing Watch Events API (gap events).
 
-Fetches vessel presence detections (EO + VMS + AIS fused) from the GFW
-4Wings API for a given bounding box and time range, then stores raw EO
-detections (those NOT matched by AIS) into the eo_detections DuckDB table.
+Fetches AIS gap events from the GFW Events API for a given bounding box and
+time range.  AIS gaps — periods where a vessel disabled its AIS transponder —
+are the closest free-tier proxy for EO/SAR dark-vessel detections.  Each gap
+event's start position and timestamp is stored as one eo_detections record.
+
+Why /v3/events instead of /v3/4wings/report
+-------------------------------------------
+The 4Wings API returns aggregated vessel-presence heatmaps (hours per grid
+cell).  It uses POST + GeoJSON and does not expose per-vessel timestamps,
+making it unsuitable for the eo_dark_count_30d feature which needs
+individual detection records.  The Events API returns structured per-vessel
+gap events with exact start timestamps and positions.
 
 API reference: https://globalfishingwatch.org/our-apis/documentation
-Requires a free GFW API token: https://globalfishingwatch.org/data/vessel-presence/
+Requires a free GFW API token: https://globalfishingwatch.org/data-access/
 
 Fallback: if no token is configured or the API is unreachable, records can be
 ingested from a local CSV with the same schema.
@@ -47,13 +56,22 @@ GFW_API_TOKEN = os.getenv("GFW_API_TOKEN", "")
 # Singapore / Malacca Strait default bounding box (lon_min, lat_min, lon_max, lat_max)
 DEFAULT_BBOX = (95.0, 1.0, 110.0, 6.0)
 
+# GFW Events API dataset for AIS gap (dark-vessel) events.
+_GFW_GAP_DATASET = "public-global-fishing-events-v2:latest"
+_GFW_EVENTS_PAGE_SIZE = 99999  # request the maximum to minimise pagination
+
 
 def fetch_gfw_detections(
     bbox: tuple[float, float, float, float] = DEFAULT_BBOX,
     days: int = 30,
     api_token: str = GFW_API_TOKEN,
 ) -> list[dict]:
-    """Fetch vessel presence detections from GFW 4Wings API.
+    """Fetch AIS gap events from the GFW Events API as dark-vessel proxy records.
+
+    Calls GET /v3/events with types[0]=gap. Each gap event's start position
+    and timestamp is mapped to one eo_detections row.  Results are post-filtered
+    to the supplied bbox because the free-tier Events API does not support
+    spatial filtering by bounding box directly.
 
     Returns a list of detection dicts with keys:
         detection_id, detected_at, lat, lon, source, confidence
@@ -62,7 +80,7 @@ def fetch_gfw_detections(
     """
     if not api_token:
         raise RuntimeError(
-            "GFW_API_TOKEN not set. Register at https://globalfishingwatch.org/data/vessel-presence/ "
+            "GFW_API_TOKEN not set. Register at https://globalfishingwatch.org/data-access/ "
             "and set the token in your .env file, or use --csv for local ingestion."
         )
 
@@ -76,30 +94,58 @@ def fetch_gfw_detections(
     start_dt = end_dt - timedelta(days=days)
 
     params = {
-        "datasets[0]": "public-global-fishing-vessels:latest",
-        "date-range": f"{start_dt.strftime('%Y-%m-%d')},{end_dt.strftime('%Y-%m-%d')}",
-        "region": f"{lon_min},{lat_min},{lon_max},{lat_max}",
-        "format": "json",
+        "datasets[0]": _GFW_GAP_DATASET,
+        "types[0]": "gap",
+        "start-date": start_dt.strftime("%Y-%m-%d"),
+        "end-date": end_dt.strftime("%Y-%m-%d"),
+        "limit": _GFW_EVENTS_PAGE_SIZE,
+        "offset": 0,
     }
     headers = {"Authorization": f"Bearer {api_token}"}
 
-    resp = httpx.get(f"{GFW_API_BASE}/4wings/report", params=params, headers=headers, timeout=60)
-    resp.raise_for_status()
+    resp = httpx.get(
+        f"{GFW_API_BASE}/events",
+        params=params,
+        headers=headers,
+        timeout=120,
+    )
+    if not resp.is_success:
+        raise RuntimeError(
+            f"GFW Events API returned {resp.status_code}.\n"
+            f"URL: {resp.url}\n"
+            f"Body: {resp.text[:1000]}"
+        )
     data = resp.json()
 
     detections = []
     for entry in data.get("entries", []):
-        if entry.get("vessel_id") and not entry.get("ais_present", True):
-            detections.append(
-                {
-                    "detection_id": entry.get("id") or str(uuid.uuid4()),
-                    "detected_at": datetime.fromisoformat(entry["timestamp"]).replace(tzinfo=UTC),
-                    "lat": float(entry["lat"]),
-                    "lon": float(entry["lon"]),
-                    "source": "gfw",
-                    "confidence": float(entry.get("score", 1.0)),
-                }
-            )
+        # Position is in entry["position"] for Events API
+        pos = entry.get("position") or {}
+        lat = pos.get("lat") or pos.get("latitude")
+        lon = pos.get("lon") or pos.get("longitude")
+        if lat is None or lon is None:
+            continue
+
+        # Post-filter to bbox (Events API free tier has no native bbox filter)
+        if not (lat_min <= float(lat) <= lat_max and lon_min <= float(lon) <= lon_max):
+            continue
+
+        ts_str = entry.get("start") or entry.get("timestamp")
+        if not ts_str:
+            continue
+
+        detections.append(
+            {
+                "detection_id": entry.get("id") or str(uuid.uuid4()),
+                "detected_at": datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(
+                    tzinfo=UTC
+                ),
+                "lat": float(lat),
+                "lon": float(lon),
+                "source": "gfw-gap",
+                "confidence": 1.0,
+            }
+        )
     return detections
 
 
