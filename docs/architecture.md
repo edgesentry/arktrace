@@ -248,7 +248,7 @@ confidence = w_anomaly × anomaly_score
            + w_identity × identity_volatility_score
 ```
 
-Default weights: `w_anomaly = 0.4`, `w_graph = 0.4`, `w_identity = 0.2`. All three are configurable via `--w-anomaly`, `--w-graph`, `--w-identity` CLI flags on `src/score/composite.py`. The C3 causal model provides a data-driven `w_graph` calibration (see section above and [roadmap.md](roadmap.md) Phase C, C3).
+Standalone `composite.py` defaults: `w_anomaly = 0.35`, `w_graph = 0.55`, `w_identity = 0.10`. The pipeline (`scripts/run_pipeline.py`) applies region-specific presets before C3 auto-calibration overrides `w_graph` — see [regional-playbooks.md](regional-playbooks.md) for per-region values. All three weights are configurable via `--w-anomaly`, `--w-graph`, `--w-identity` CLI flags. The C3 causal model provides a data-driven `w_graph` calibration (see section above and [roadmap.md](roadmap.md) Phase C, C3).
 
 Per-region weight tuning recommendations are in [regional-playbooks.md](regional-playbooks.md).
 

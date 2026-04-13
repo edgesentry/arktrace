@@ -71,10 +71,10 @@ The model trains only on vessels with `sanctions_distance ≥ 3` — far enough 
 
 ```python
 raw = -model.decision_function(scaled)   # higher = more anomalous
-anomaly_score = 0.75 * norm(raw) + 0.25 * baseline_noise_score
+anomaly_score = 0.65 * norm(raw) + 0.35 * baseline_noise_score
 ```
 
-The isolation forest raw score is min-max normalised to [0, 1], then blended 75/25 with the HDBSCAN baseline noise score. The blend ensures that a vessel whose behaviour is globally anomalous (Isolation Forest) AND locally anomalous relative to its ship-type peer group (HDBSCAN noise) receives the highest possible anomaly score.
+The isolation forest raw score is min-max normalised to [0, 1], then blended 65/35 with the HDBSCAN baseline noise score. The blend ensures that a vessel whose behaviour is globally anomalous (Isolation Forest) AND locally anomalous relative to its ship-type peer group (HDBSCAN noise) receives the highest possible anomaly score.
 
 ### Hyperparameters
 
@@ -129,12 +129,13 @@ graph_risk = 0.55 × sanctions_component
 Weighted combination of identity volatility signals:
 
 ```python
-identity = 0.30 × clip(flag_changes_2y / 5, 0, 1)
-         + 0.25 × clip(name_changes_2y / 5, 0, 1)
-         + 0.20 × clip(owner_changes_2y / 5, 0, 1)
-         + 0.15 × clip(high_risk_flag_ratio, 0, 1)
+identity = 0.40 × clip(name_changes_2y / 5, 0, 1)
+         + 0.30 × clip(owner_changes_2y / 5, 0, 1)
+         + 0.20 × clip(high_risk_flag_ratio, 0, 1)
          + 0.10 × clip(ownership_depth / 6, 0, 1)
 ```
+
+`flag_changes_2y` is excluded: `vessel_meta` stores only the current flag state, not change history, so this field is always 0. Its former weight is redistributed to the live signals above.
 
 #### `anomaly_score`
 
