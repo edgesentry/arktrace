@@ -1,7 +1,6 @@
 """Unit tests for vessel name matching in _build_labels_for_watchlist (#232)."""
 
 import polars as pl
-import pytest
 
 from scripts.run_public_backtest_batch import _build_labels_for_watchlist, _normalize_vessel_name
 
