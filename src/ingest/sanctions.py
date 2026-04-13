@@ -84,6 +84,21 @@ def download_opensanctions(
 # ---------------------------------------------------------------------------
 
 
+def _normalize_imo(raw: str | None) -> str | None:
+    """Strip the 'IMO' prefix used by OpenSanctions FtM imoNumber values.
+
+    OpenSanctions stores IMO numbers as e.g. 'IMO9305609'; vessel_meta and
+    all downstream joins use the bare 7-digit form '9305609'.  Normalising
+    at ingest keeps every consumer consistent without per-query workarounds.
+    """
+    if not raw:
+        return None
+    stripped = raw.strip()
+    if stripped.upper().startswith("IMO"):
+        stripped = stripped[3:]
+    return stripped or None
+
+
 def parse_ftm_entity(entity: dict) -> dict | None:
     """Extract a flat sanctions_entities row from an OpenSanctions FtM entity.
 
@@ -112,7 +127,7 @@ def parse_ftm_entity(entity: dict) -> dict | None:
         "entity_id": entity_id,
         "name": name,
         "mmsi": first("mmsi"),
-        "imo": first("imoNumber"),
+        "imo": _normalize_imo(first("imoNumber")),
         "flag": first("flag") or first("country"),
         "type": schema,
         "list_source": list_source,

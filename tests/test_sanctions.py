@@ -3,7 +3,12 @@ from pathlib import Path
 
 import duckdb
 
-from src.ingest.sanctions import _flush_batch, load_jsonl_to_duckdb, parse_ftm_entity
+from src.ingest.sanctions import (
+    _flush_batch,
+    _normalize_imo,
+    load_jsonl_to_duckdb,
+    parse_ftm_entity,
+)
 
 # ---------------------------------------------------------------------------
 # parse_ftm_entity
@@ -48,7 +53,7 @@ def test_parse_vessel():
     assert row["entity_id"] == "ofac-vessel-001"
     assert row["name"] == "OCEAN GLORY"
     assert row["mmsi"] == "123456789"
-    assert row["imo"] == "IMO9876543"
+    assert row["imo"] == "9876543"
     assert row["flag"] == "KP"
     assert row["type"] == "Vessel"
     assert row["list_source"] == "ofac_sdn"
@@ -103,6 +108,39 @@ def test_parse_uses_caption_as_fallback_name():
     row = parse_ftm_entity(entity)
     assert row is not None
     assert row["name"] == "CAPTION NAME"
+
+
+# ---------------------------------------------------------------------------
+# _normalize_imo
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_imo_strips_upper_prefix():
+    assert _normalize_imo("IMO9305609") == "9305609"
+
+
+def test_normalize_imo_strips_lower_prefix():
+    assert _normalize_imo("imo9305609") == "9305609"
+
+
+def test_normalize_imo_strips_mixed_prefix():
+    assert _normalize_imo("Imo9305609") == "9305609"
+
+
+def test_normalize_imo_bare_number_unchanged():
+    assert _normalize_imo("9305609") == "9305609"
+
+
+def test_normalize_imo_none_returns_none():
+    assert _normalize_imo(None) is None
+
+
+def test_normalize_imo_empty_returns_none():
+    assert _normalize_imo("") is None
+
+
+def test_normalize_imo_prefix_only_returns_none():
+    assert _normalize_imo("IMO") is None
 
 
 # ---------------------------------------------------------------------------
