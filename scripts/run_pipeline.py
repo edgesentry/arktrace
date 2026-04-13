@@ -348,7 +348,7 @@ def _print_region_summary(p: RegionPreset) -> None:
 # Pipeline steps
 # ---------------------------------------------------------------------------
 
-TOTAL_STEPS = 10
+TOTAL_STEPS = 11
 
 
 def step_schema(p: RegionPreset, non_interactive: bool) -> bool:
@@ -504,8 +504,53 @@ def step_custom_feeds(p: RegionPreset, non_interactive: bool) -> bool:
         return _ask_retry_skip("custom_feeds") == "skip"
 
 
+def step_eo_gfw(p: RegionPreset, non_interactive: bool, gfw_days: int = 30) -> bool:
+    """Ingest GFW EO vessel detections for the region bbox.
+
+    Skipped silently when GFW_API_TOKEN is not set — the two EO features
+    (eo_dark_count_30d, eo_ais_mismatch_ratio) default to 0 in that case.
+    """
+    _step(6, TOTAL_STEPS, "Ingesting GFW EO detections...")
+    api_token = os.getenv("GFW_API_TOKEN", "")
+    if not api_token:
+        print(
+            _dim(
+                "(skipped — GFW_API_TOKEN not set; set it in .env to activate EO dark-vessel signal)"
+            )
+        )
+        return True
+
+    lat_min, lon_min, lat_max, lon_max = p.bbox
+    bbox_str = f"{lon_min},{lat_min},{lon_max},{lat_max}"
+    result = _run(
+        [
+            sys.executable,
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "src",
+                "ingest",
+                "eo_gfw.py",
+            ),
+            "--bbox",
+            bbox_str,
+            "--days",
+            str(gfw_days),
+            "--db",
+            p.db_path,
+        ]
+    )
+    if result.returncode == 0:
+        count_line = next((l for l in result.stdout.splitlines() if "inserted" in l.lower()), "")
+        _ok(count_line.strip() if count_line else "")
+        return True
+    _fail(result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "non-zero exit")
+    if non_interactive:
+        return False
+    return _ask_retry_skip("GFW EO ingest") == "skip"
+
+
 def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(6, TOTAL_STEPS, "Building ownership graph...")
+    _step(7, TOTAL_STEPS, "Building ownership graph...")
     # vessel_registry builds Lance datasets from DuckDB vessel_meta
     reg = _run([sys.executable, "-m", "src.ingest.vessel_registry", "--db", p.db_path])
     if reg.returncode != 0:
@@ -527,7 +572,7 @@ def step_ownership_graph(p: RegionPreset, non_interactive: bool) -> bool:
 
 
 def step_features(p: RegionPreset, non_interactive: bool, seed_dummy: bool = False) -> bool:
-    _step(7, TOTAL_STEPS, "Computing features...")
+    _step(8, TOTAL_STEPS, "Computing features...")
     env = {"DB_PATH": p.db_path}
     cmds = [
         (
@@ -601,7 +646,7 @@ def step_score(
     non_interactive: bool,
     geo_filter_path: str | None = None,
 ) -> bool:
-    _step(8, TOTAL_STEPS, "Scoring...")
+    _step(9, TOTAL_STEPS, "Scoring...")
     env = {"DB_PATH": p.db_path}
 
     # C3: calibrate graph_risk_score weight before composite scoring
@@ -667,7 +712,7 @@ def step_score(
 
 
 def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> bool:
-    _step(9, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
+    _step(10, TOTAL_STEPS, f"Ingesting GDELT context ({gdelt_days}d)...")
     result = _run([sys.executable, "-m", "src.ingest.gdelt", "--days", str(gdelt_days)])
     if result.returncode == 0:
         count_line = next((l for l in result.stdout.splitlines() if "total" in l.lower()), "")
@@ -680,7 +725,7 @@ def step_gdelt(p: RegionPreset, non_interactive: bool, gdelt_days: int = 3) -> b
 
 
 def step_dashboard(p: RegionPreset, non_interactive: bool) -> bool:
-    _step(10, TOTAL_STEPS, "Launching dashboard...")
+    _step(11, TOTAL_STEPS, "Launching dashboard...")
     if non_interactive:
         print(_dim("(skipped in non-interactive mode)"))
         return True
@@ -742,6 +787,16 @@ def main() -> None:
         default=3,
         metavar="DAYS",
         help="Number of days of GDELT events to ingest for geopolitical context (default: 3)",
+    )
+    parser.add_argument(
+        "--gfw-days",
+        type=int,
+        default=30,
+        metavar="DAYS",
+        help=(
+            "Lookback window in days for GFW EO vessel detections (default: 30). "
+            "Requires GFW_API_TOKEN in .env — skipped silently if not set."
+        ),
     )
     parser.add_argument(
         "--seed-dummy",
@@ -807,6 +862,7 @@ def main() -> None:
 
     stream_duration: int = args.stream_duration
     gdelt_days: int = args.gdelt_days
+    gfw_days: int = args.gfw_days
     seed_dummy: bool = args.seed_dummy
     marine_cadastre_years: list[int] = args.marine_cadastre_years or []
     geo_filter_path: str | None = args.geopolitical_event_filter
@@ -818,6 +874,7 @@ def main() -> None:
         lambda p, ni: step_ais_stream(p, ni, stream_duration),
         step_sanctions,
         step_custom_feeds,
+        lambda p, ni: step_eo_gfw(p, ni, gfw_days),
         step_ownership_graph,
         lambda p, ni: step_features(p, ni, seed_dummy),
         lambda p, ni: step_score(p, ni, geo_filter_path),
