@@ -1,21 +1,27 @@
 """
-EO vessel detection ingestion — Global Fishing Watch Events API (gap events).
+EO vessel detection ingestion — Global Fishing Watch Events API.
 
-Fetches AIS gap events from the GFW Events API for a given bounding box and
-time range.  AIS gaps — periods where a vessel disabled its AIS transponder —
-are the closest free-tier proxy for EO/SAR dark-vessel detections.  Each gap
-event's start position and timestamp is stored as one eo_detections record.
+Fetches FISHING events from the GFW Events API for a given bounding box and
+time range and stores them as eo_detections records.  These represent vessels
+detected fishing in the region via AIS + ML activity classification.
 
-Why /v3/events instead of /v3/4wings/report
--------------------------------------------
-The 4Wings API returns aggregated vessel-presence heatmaps (hours per grid
-cell).  It uses POST + GeoJSON and does not expose per-vessel timestamps,
-making it unsuitable for the eo_dark_count_30d feature which needs
-individual detection records.  The Events API returns structured per-vessel
-gap events with exact start timestamps and positions.
+Free-tier token access
+----------------------
+The free-tier GFW API token provides access to FISHING events only.
+AIS GAP events (vessels that disabled their AIS transponder — the ideal
+dark-vessel proxy) require a research or premium tier token from GFW.
+
+To request research access: https://globalfishingwatch.org/data-access/
+
+With a research token, change _GFW_EVENT_TYPES to ["GAP", "GAP_START"] and
+update the source label to "gfw-gap" for semantically correct dark-vessel
+counting in the eo_dark_count_30d feature.
+
+With the free-tier token, FISHING events serve as a maritime activity density
+signal: high fishing vessel density near a suspect vessel's track is a useful
+operational context feature even if it is not a direct dark-vessel proxy.
 
 API reference: https://globalfishingwatch.org/our-apis/documentation
-Requires a free GFW API token: https://globalfishingwatch.org/data-access/
 
 Fallback: if no token is configured or the API is unreachable, records can be
 ingested from a local CSV with the same schema.
@@ -30,7 +36,7 @@ CSV schema:
 
 Usage:
     # From GFW API (requires GFW_API_TOKEN env var):
-    uv run python src/ingest/eo_gfw.py --bbox 95,1,110,6 --days 30
+    uv run python src/ingest/eo_gfw.py --bbox 95,1,110,6 --days 365
 
     # From local CSV:
     uv run python src/ingest/eo_gfw.py --csv path/to/detections.csv
@@ -56,22 +62,29 @@ GFW_API_TOKEN = os.getenv("GFW_API_TOKEN", "")
 # Singapore / Malacca Strait default bounding box (lon_min, lat_min, lon_max, lat_max)
 DEFAULT_BBOX = (95.0, 1.0, 110.0, 6.0)
 
-# GFW Events API dataset for AIS gap (dark-vessel) events.
-_GFW_GAP_DATASET = "public-global-fishing-events:latest"
+_GFW_DATASET = "public-global-fishing-events:latest"
 _GFW_EVENTS_PAGE_SIZE = 99999  # request the maximum to minimise pagination
+
+# Free-tier token only grants access to FISHING events.
+# Switch to ["GAP", "GAP_START"] with a research/premium token for dark-vessel detection.
+_GFW_EVENT_TYPES = ["FISHING"]
+_GFW_SOURCE_LABEL = "gfw-fishing"
 
 
 def fetch_gfw_detections(
     bbox: tuple[float, float, float, float] = DEFAULT_BBOX,
-    days: int = 30,
+    days: int = 365,
     api_token: str = GFW_API_TOKEN,
 ) -> list[dict]:
-    """Fetch AIS gap events from the GFW Events API as dark-vessel proxy records.
+    """Fetch GFW fishing events as maritime-activity proxy records.
 
-    Calls GET /v3/events with types[0]=gap. Each gap event's start position
-    and timestamp is mapped to one eo_detections row.  Results are post-filtered
-    to the supplied bbox because the free-tier Events API does not support
-    spatial filtering by bounding box directly.
+    Calls GET /v3/events with the configured event types.  Each event's start
+    position and timestamp is mapped to one eo_detections row.  Results are
+    post-filtered to the supplied bbox because the Events API does not support
+    bounding-box spatial filtering natively.
+
+    Free-tier tokens return FISHING events (vessel activity density signal).
+    Research-tier tokens can return GAP/GAP_START (AIS gap = dark-vessel signal).
 
     Returns a list of detection dicts with keys:
         detection_id, detected_at, lat, lon, source, confidence
@@ -93,15 +106,16 @@ def fetch_gfw_detections(
     end_dt = datetime.now(UTC)
     start_dt = end_dt - timedelta(days=days)
 
-    params = {
-        "datasets[0]": _GFW_GAP_DATASET,
-        "types[0]": "GAP",
-        "types[1]": "GAP_START",
+    params: dict[str, object] = {
+        "datasets[0]": _GFW_DATASET,
         "start-date": start_dt.strftime("%Y-%m-%d"),
         "end-date": end_dt.strftime("%Y-%m-%d"),
         "limit": _GFW_EVENTS_PAGE_SIZE,
         "offset": 0,
     }
+    for i, etype in enumerate(_GFW_EVENT_TYPES):
+        params[f"types[{i}]"] = etype
+
     headers = {"Authorization": f"Bearer {api_token}"}
 
     resp = httpx.get(
@@ -118,27 +132,32 @@ def fetch_gfw_detections(
         )
     data = resp.json()
 
-    # Debug: show top-level keys and total count so caller can diagnose empty results.
-    top_keys = list(data.keys()) if isinstance(data, dict) else type(data).__name__
     total = data.get("total", "?") if isinstance(data, dict) else "?"
-    print(f"[gfw-debug] response keys={top_keys} total={total}", flush=True)
+    print(
+        f"[gfw] types={_GFW_EVENT_TYPES} total_global={total} "
+        f"bbox=({lon_min},{lat_min},{lon_max},{lat_max})",
+        flush=True,
+    )
 
     detections = []
     for entry in data.get("entries", []):
-        # Position is in entry["position"] for Events API
         pos = entry.get("position") or {}
         lat = pos.get("lat") or pos.get("latitude")
         lon = pos.get("lon") or pos.get("longitude")
         if lat is None or lon is None:
             continue
 
-        # Post-filter to bbox (Events API free tier has no native bbox filter)
+        # Post-filter to bbox (Events API has no native bbox filter)
         if not (lat_min <= float(lat) <= lat_max and lon_min <= float(lon) <= lon_max):
             continue
 
         ts_str = entry.get("start") or entry.get("timestamp")
         if not ts_str:
             continue
+
+        # Use potentialRisk flag as confidence signal when available (FISHING events).
+        fishing_meta = entry.get("fishing") or {}
+        confidence = 0.8 if fishing_meta.get("potentialRisk") else 0.5
 
         detections.append(
             {
@@ -148,8 +167,8 @@ def fetch_gfw_detections(
                 ),
                 "lat": float(lat),
                 "lon": float(lon),
-                "source": "gfw-gap",
-                "confidence": 1.0,
+                "source": _GFW_SOURCE_LABEL,
+                "confidence": confidence,
             }
         )
     return detections
@@ -268,7 +287,7 @@ if __name__ == "__main__":
         "--days",
         type=int,
         default=365,
-        help="Lookback window in days (default: 365; GFW data lags real-time by 2–6 months)",
+        help="Lookback window in days (default: 365)",
     )
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
     args = parser.parse_args()
