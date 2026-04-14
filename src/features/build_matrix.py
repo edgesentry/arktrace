@@ -222,7 +222,7 @@ def _compute_sts_hub_degree_from_lance(db_path: str, matrix: pl.DataFrame) -> pl
         sts_ds = lance.dataset(sts_path)
         if sts_ds.count_rows() == 0:
             return matrix
-        sts_df = pl.from_arrow(sts_ds.to_table())
+        sts_df = pl.DataFrame(sts_ds.to_table())
     except Exception:
         return matrix  # Lance not built yet; leave defaults
 
