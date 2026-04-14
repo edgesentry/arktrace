@@ -59,6 +59,13 @@ Commands
                       a real pipeline run so CI can pull real watchlists for the backtest
   pull-watchlists     download watchlists.zip from R2 and extract into data/processed/ — used
                       by data-publish CI job (replaces seeded pipeline run)
+  push-demo           upload fixed-key demo bundle (candidate_watchlist.parquet,
+                      composite_scores.parquet, causal_effects.parquet,
+                      validation_metrics.json) to R2 — requires credentials; run after
+                      a real pipeline run or from the data-publish CI job
+  pull-demo           download the demo bundle from R2 into data/processed/ — no credentials
+                      required; intended for developers who want to run the dashboard
+                      without running the full pipeline locally
   list                show all snapshot zips and shared objects in R2
 
 Env vars (loaded from .env automatically)
@@ -75,11 +82,13 @@ Examples
   uv run python scripts/sync_r2.py push-gdelt                # upload/update gdelt.lance.zip
   uv run python scripts/sync_r2.py push-sanctions-db         # upload/update public_eval.duckdb
   uv run python scripts/sync_r2.py push-watchlists           # upload *_watchlist.parquet (<1 MB)
+  uv run python scripts/sync_r2.py push-demo                 # upload demo bundle (CI runs this)
   uv run python scripts/sync_r2.py pull                      # pull latest (no credentials needed)
   uv run python scripts/sync_r2.py pull --timestamp 20260411T080000Z
   uv run python scripts/sync_r2.py pull-gdelt                # pull gdelt.lance.zip
   uv run python scripts/sync_r2.py pull-sanctions-db         # pull public_eval.duckdb for tests
   uv run python scripts/sync_r2.py pull-watchlists           # pull watchlists.zip (used by CI)
+  uv run python scripts/sync_r2.py pull-demo                 # pull demo bundle (no credentials)
   uv run python scripts/sync_r2.py list                      # show all generations in R2
 """
 
@@ -110,6 +119,16 @@ _LATEST_KEY = "latest"  # plain-text pointer to newest timestamp
 _GDELT_R2_KEY = "gdelt.lance.zip"  # single zip for gdelt
 _SANCTIONS_DB_R2_KEY = "public_eval.duckdb"  # OpenSanctions DB; separate from rotation zip
 _WATCHLISTS_R2_KEY = "watchlists.zip"  # lightweight bundle of *_watchlist.parquet files
+_DEMO_R2_KEY = "demo.zip"  # fixed-key public demo bundle; overwritten on every push-demo
+
+# Files included in the demo bundle — lightweight artifacts that let developers run the
+# dashboard without re-running the full pipeline.  No heavy DuckDB or Lance files.
+_DEMO_FILES = [
+    "candidate_watchlist.parquet",
+    "composite_scores.parquet",
+    "causal_effects.parquet",
+    "validation_metrics.json",
+]
 
 # Maps user-facing region name → file prefix used in data/processed/
 # e.g. "japan" → files are japansea.duckdb, japansea_graph/, japansea_watchlist.parquet
@@ -758,6 +777,104 @@ def cmd_pull_watchlists(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_push_demo(args: argparse.Namespace) -> int:
+    """Upload the fixed-key demo bundle to R2 (requires credentials).
+
+    Overwrites demo.zip on every run — there is no rotation; the file always
+    reflects the most recent pipeline run.  Intended to be called from the
+    data-publish CI job after the main push step.
+    """
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    data_dir = Path(args.data_dir)
+    r2_path = f"{bucket}/{_DEMO_R2_KEY}"
+
+    missing = [f for f in _DEMO_FILES if not (data_dir / f).exists()]
+    if missing:
+        print(
+            f"Error: the following demo files are missing from {data_dir}:\n"
+            + "".join(f"  {f}\n" for f in missing)
+            + "Run the pipeline first or check _DEMO_FILES in sync_r2.py.",
+            file=sys.stderr,
+        )
+        return 1
+
+    fs = _build_r2_fs()
+
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+
+    try:
+        with zipmod.ZipFile(tmp_path, "w", compression=zipmod.ZIP_STORED) as zf:
+            for name in _DEMO_FILES:
+                local = data_dir / name
+                zf.write(local, arcname=name)
+                print(f"  + {name} ({local.stat().st_size / 1024:.1f} KB)")
+        size_mb = tmp_path.stat().st_size / 1_048_576
+        print(f"Uploading demo.zip ({size_mb:.2f} MB) → R2 {r2_path} ...")
+        uploaded = _upload_file(fs, tmp_path, r2_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    print(f"Done. {uploaded / 1_048_576:.2f} MB uploaded.")
+    print(
+        "\nDevelopers can now fetch the demo bundle without credentials:\n"
+        "  uv run python scripts/sync_r2.py pull-demo\n"
+        "  # or: bash scripts/fetch_demo_data.sh"
+    )
+    return 0
+
+
+def cmd_pull_demo(args: argparse.Namespace) -> int:
+    """Download the demo bundle from R2 into data/processed/ (no credentials required).
+
+    Provides a zero-auth path for developers who want to explore the dashboard
+    output without running the full AIS ingestion + scoring pipeline locally.
+    """
+    bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
+    data_dir = Path(args.data_dir)
+    r2_path = f"{bucket}/{_DEMO_R2_KEY}"
+
+    anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
+    fs = _build_r2_fs(anonymous=anon)
+
+    import pyarrow.fs as pafs
+
+    try:
+        infos = fs.get_file_info([r2_path])
+        if infos[0].type == pafs.FileType.NotFound:
+            raise FileNotFoundError
+        size_mb = infos[0].size / 1_048_576
+    except Exception:
+        print(
+            "No demo.zip found in R2. The app owner needs to run:\n"
+            "  uv run python scripts/run_pipeline.py --region singapore --non-interactive\n"
+            "  uv run python scripts/sync_r2.py push-demo",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Downloading demo.zip ({size_mb:.2f} MB) ...")
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        downloaded = _download_file(fs, r2_path, tmp_path)
+        data_dir.mkdir(parents=True, exist_ok=True)
+        with zipmod.ZipFile(tmp_path, "r") as zf:
+            names = zf.namelist()
+            zf.extractall(data_dir)
+        print(f"Extracted {len(names)} files to {data_dir}/: {', '.join(names)}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    print(f"Done. {downloaded / 1_048_576:.2f} MB downloaded.")
+    print(
+        "\nYou can now run the dashboard without a full pipeline:\n"
+        "  uv run streamlit run src/ui/app.py\n"
+        "  open http://localhost:8501"
+    )
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
@@ -901,6 +1018,24 @@ def main() -> int:
     )
     pull_watchlists_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
 
+    push_demo_p = sub.add_parser(
+        "push-demo",
+        help=(
+            "Upload fixed-key demo bundle (watchlist + scores + causal effects + metrics) "
+            "to R2 — requires credentials; run after a pipeline run or from CI"
+        ),
+    )
+    push_demo_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+
+    pull_demo_p = sub.add_parser(
+        "pull-demo",
+        help=(
+            "Download demo bundle from R2 into data/processed/ — no credentials required; "
+            "lets developers run the dashboard without a local pipeline run"
+        ),
+    )
+    pull_demo_p.add_argument("--data-dir", default=_DEFAULT_DATA_DIR, metavar="DIR")
+
     sub.add_parser("list", help="List snapshot zips and shared objects in R2")
 
     args = parser.parse_args()
@@ -914,6 +1049,7 @@ def main() -> int:
         "pull-gdelt",
         "pull-sanctions-db",
         "pull-watchlists",
+        "pull-demo",
         "list",
     )
     if not _check_env(require_credentials=not read_only):
@@ -928,6 +1064,8 @@ def main() -> int:
         "pull-sanctions-db": cmd_pull_sanctions_db,
         "push-watchlists": cmd_push_watchlists,
         "pull-watchlists": cmd_pull_watchlists,
+        "push-demo": cmd_push_demo,
+        "pull-demo": cmd_pull_demo,
         "list": cmd_list,
     }
     return dispatch[args.command](args)

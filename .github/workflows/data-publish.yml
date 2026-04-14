@@ -89,6 +89,16 @@ jobs:
           echo "snapshot_id=$snapshot_id" >> "$GITHUB_OUTPUT"
           echo "snapshot_mb=$snapshot_mb" >> "$GITHUB_OUTPUT"
 
+      - name: Push demo bundle to R2 (public, no-auth download)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+        run: |
+          # Overwrites demo.zip with the latest pipeline outputs so developers can
+          # run `pull-demo` (or fetch_demo_data.sh) without any credentials.
+          uv run python scripts/sync_r2.py push-demo
+
       - name: Push OpenSanctions DB to R2 (push-sanctions-db)
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
