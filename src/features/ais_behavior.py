@@ -224,7 +224,7 @@ def compute_port_call_ratio(df: pl.DataFrame) -> pl.DataFrame:
 
 def compute_ais_features(
     db_path: str = DEFAULT_DB_PATH,
-    window_days: int = 30,
+    window_days: int = 60,
     gap_threshold_h: float = GAP_THRESHOLD_H,
 ) -> pl.DataFrame:
     """Compute all AIS behavioral features. Returns DataFrame one row per MMSI."""
@@ -277,7 +277,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Compute AIS behavioral features")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
-    parser.add_argument("--window", type=int, default=30, help="Rolling window (days)")
+    parser.add_argument("--window", type=int, default=60, help="Rolling window (days)")
     parser.add_argument(
         "--gap-threshold-hours",
         type=float,

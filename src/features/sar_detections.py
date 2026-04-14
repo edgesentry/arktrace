@@ -88,7 +88,7 @@ def _load_ais_window(db_path: str, window_days: int) -> pl.DataFrame:
 
 def compute_unmatched_sar_detections(
     db_path: str = DEFAULT_DB_PATH,
-    window_days: int = 30,
+    window_days: int = 60,
     match_radius_km: float = MATCH_RADIUS_KM,
     match_window_minutes: int = MATCH_WINDOW_MINUTES,
     gap_threshold_h: float = GAP_THRESHOLD_H,
@@ -181,7 +181,7 @@ def compute_unmatched_sar_detections(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute SAR-based vessel features")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
-    parser.add_argument("--window", type=int, default=30, help="Rolling window (days)")
+    parser.add_argument("--window", type=int, default=60, help="Rolling window (days)")
     parser.add_argument("--match-radius-km", type=float, default=MATCH_RADIUS_KM)
     parser.add_argument("--match-window-minutes", type=int, default=MATCH_WINDOW_MINUTES)
     parser.add_argument("--gap-threshold-hours", type=float, default=GAP_THRESHOLD_H)

@@ -44,7 +44,7 @@ PRESETS: dict[str, RegionPreset] = {
         label="Singapore / Malacca Strait",
         bbox=[-5, 92, 22, 122],
         gap_threshold_h=4,  # #234: 4h captures brief Malacca STS coordination gaps
-        window_days=30,
+        window_days=60,
         w_anomaly=0.40,
         w_graph=0.40,
         w_identity=0.20,
@@ -550,7 +550,18 @@ def step_features(p: RegionPreset, non_interactive: bool, seed_dummy: bool = Fal
             [sys.executable, "-m", "src.features.trade_mismatch", "--db", p.db_path],
             "trade_mismatch",
         ),
-        ([sys.executable, "-m", "src.features.build_matrix", "--db", p.db_path], "build_matrix"),
+        (
+            [
+                sys.executable,
+                "-m",
+                "src.features.build_matrix",
+                "--db",
+                p.db_path,
+                "--window",
+                str(p.window_days),
+            ],
+            "build_matrix",
+        ),
     ]
     for cmd, label in cmds:
         result = _run(cmd, env=env)
