@@ -192,12 +192,12 @@ def _compute_sanctions_list_count(db_path: str, matrix: pl.DataFrame) -> pl.Data
     count_df = count_df.with_columns(
         pl.col("mmsi").cast(pl.Utf8),
         pl.col("sanctions_list_count").cast(pl.Int32),
+    ).rename({"sanctions_list_count": "_slc"})
+    return (
+        matrix.join(count_df, on="mmsi", how="left")
+        .with_columns(pl.col("_slc").fill_null(0).cast(pl.Int32).alias("sanctions_list_count"))
+        .drop("_slc")
     )
-    return matrix.join(count_df, on="mmsi", how="left", suffix="_new").with_columns(
-        pl.col("sanctions_list_count_new")
-        .fill_null(pl.col("sanctions_list_count"))
-        .alias("sanctions_list_count")
-    ).drop("sanctions_list_count_new")
 
 
 def build_feature_matrix(

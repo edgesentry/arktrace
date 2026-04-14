@@ -368,7 +368,11 @@ def _compute_graph_risk(df: pl.DataFrame) -> pl.Series:
     sts_component = np.clip(df["sts_hub_degree"].to_numpy() / 10.0, 0.0, 1.0)
     # sanctions_list_count: number of distinct sanction programs (OFAC, EU, UN, …).
     # Capped at 5; differentiates vessels at identical sanctions_distance.
-    list_count = df["sanctions_list_count"].fill_null(0).to_numpy() if "sanctions_list_count" in df.columns else np.zeros(len(df))
+    list_count = (
+        df["sanctions_list_count"].fill_null(0).to_numpy()
+        if "sanctions_list_count" in df.columns
+        else np.zeros(len(df))
+    )
     list_count_component = np.clip(list_count / 5.0, 0.0, 1.0)
     score = (
         0.45 * sanctions_component
