@@ -33,6 +33,11 @@ Filename convention (used when column detection is ambiguous):
     cargo_*.csv  /  manifest_*.csv  → Cargo manifest
     sanctions_*.csv    → Custom sanctions
 
+Sample files (skipped automatically):
+    Files whose stem ends with ``_sample`` (e.g. ``ais_sample.csv``,
+    ``sanctions_sample.csv``) are always skipped so smoke-test fixtures
+    in ``_inputs/custom_feeds/`` never pollute the live pipeline DB.
+
 Column-map sidecar (optional, for AIS feeds with non-standard column names):
     Create a JSON file alongside your CSV with the same stem:
         _inputs/custom_feeds/my_feed.csv
@@ -272,6 +277,9 @@ def ingest_custom_feeds(
     init_schema(db_path)
 
     for csv_path in csv_files:
+        if csv_path.stem.endswith("_sample"):
+            print(f"  [custom_feeds] SKIP {csv_path.name} — sample fixture, not for live pipeline")
+            continue
         try:
             header = pl.read_csv(csv_path, n_rows=0)
             columns = header.columns
