@@ -326,6 +326,30 @@ class TestEdgeCases:
         con.close()
         assert rows == 0
 
+    def test_sample_files_skipped(self, tmp_path):
+        # Smoke-test fixtures (e.g. ais_sample.csv) must never touch the live DB
+        _write_csv(
+            tmp_path,
+            "lat,lon,detected_at\n1.2,103.8,2024-01-15T08:30:00\n",
+            "sar_sample.csv",
+        )
+        _write_csv(
+            tmp_path,
+            "lat,lon,detected_at\n1.3,103.9,2024-01-16T09:00:00\n",
+            "sar_real.csv",
+        )
+        db_path = _db(tmp_path)
+        results = ingest_custom_feeds(tmp_path, db_path)
+        # sample file must be absent from results
+        assert "sar_sample.csv" not in results
+        # real file is ingested normally
+        assert results["sar_real.csv"] == 1
+
+        con = duckdb.connect(db_path)
+        rows = con.execute("SELECT COUNT(*) FROM sar_detections").fetchone()[0]
+        con.close()
+        assert rows == 1
+
     def test_multiple_files(self, tmp_path):
         _write_csv(
             tmp_path,
