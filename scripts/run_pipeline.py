@@ -796,7 +796,7 @@ def main() -> None:
         metavar="PATH",
         help=(
             "Path to a JSON file declaring geopolitical rerouting events. "
-            "Vessels in active corridors have their anomaly_score down-weighted "
+            "Vessels in active corridors have their behavioral_deviation_score down-weighted "
             "to reduce false positives from legitimate commercial rerouting "
             "(e.g. Cape of Good Hope diversion since 2024). "
             "See config/geopolitical_events.json for the sample format."

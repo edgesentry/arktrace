@@ -87,14 +87,14 @@ def test_baseline_and_anomaly_scores(tmp_db):
     features = load_feature_frame(tmp_db)
     anomaly_df, _, _ = score_anomalies(features, baseline)
     assert anomaly_df.height == 8
-    assert anomaly_df["anomaly_score"].min() >= 0.0
-    assert anomaly_df["anomaly_score"].max() <= 1.0
+    assert anomaly_df["behavioral_deviation_score"].min() >= 0.0
+    assert anomaly_df["behavioral_deviation_score"].max() <= 1.0
 
 
 def test_directly_sanctioned_vessels_differentiated_by_list_count(tmp_db):
     """Vessels at sanctions_distance=0 with different program counts must not all tie.
 
-    Root cause of #243: when anomaly_score≈0 and identity_score≈0, the only
+    Root cause of #243: when behavioral_deviation_score≈0 and identity_score≈0, the only
     remaining signal is graph_risk_score.  With identical sanctions_distance the
     old formula gave every directly-sanctioned vessel the same score.
     sanctions_list_count breaks this tie.
