@@ -278,6 +278,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # When the pipeline was seeded with dummy vessels, those vessels ARE the
+    # intended positive cases for CI verification — don't filter them out.
+    filter_dummy_mmsis = not args.no_filter_dummy_mmsis and not args.seed_dummy
+
     project_root = Path(__file__).resolve().parents[1]
     scripts_dir = project_root / "scripts"
     processed_dir = project_root / "data" / "processed"
@@ -341,7 +345,7 @@ def main() -> None:
             watchlist,
             positives,
             args.max_known_cases,
-            filter_dummy_mmsis=not args.no_filter_dummy_mmsis,
+            filter_dummy_mmsis=filter_dummy_mmsis,
         )
         labels_path = (processed_dir / f"eval_labels_public_{region}_integration.csv").resolve()
         labels.write_csv(labels_path)
