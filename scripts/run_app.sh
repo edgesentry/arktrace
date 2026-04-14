@@ -77,14 +77,8 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
 fi
 
 # ── Resolve data directory ─────────────────────────────────────────────────────
-# Priority: ARKTRACE_DATA_DIR env var → repo-local data/processed → ~/.arktrace/data
-if [[ -n "${ARKTRACE_DATA_DIR:-}" ]]; then
-  DATA_DIR="${ARKTRACE_DATA_DIR}"
-elif [[ -d "${REPO_ROOT}/data/processed" ]]; then
-  DATA_DIR="${REPO_ROOT}/data/processed"
-else
-  DATA_DIR="${HOME}/.arktrace/data"
-fi
+# Canonical location: ~/.arktrace/data  (override with ARKTRACE_DATA_DIR)
+DATA_DIR="${ARKTRACE_DATA_DIR:-${HOME}/.arktrace/data}"
 export ARKTRACE_DATA_DIR="${DATA_DIR}"
 export ARKTRACE_REGION="${REGION}"
 export DB_PATH="${DATA_DIR}/${DB_FILENAME}"
