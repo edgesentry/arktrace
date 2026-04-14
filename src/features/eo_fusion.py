@@ -95,7 +95,7 @@ def _load_ais_window(db_path: str, window_days: int) -> pl.DataFrame:
 
 def compute_eo_features(
     db_path: str = DEFAULT_DB_PATH,
-    window_days: int = 30,
+    window_days: int = 60,
     match_radius_deg: float = MATCH_RADIUS_DEG,
     match_window_minutes: int = MATCH_WINDOW_MINUTES,
     gap_threshold_h: float = GAP_THRESHOLD_H,
@@ -204,7 +204,7 @@ def compute_eo_features(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute EO fusion features")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
-    parser.add_argument("--window", type=int, default=30)
+    parser.add_argument("--window", type=int, default=60)
     parser.add_argument("--match-radius-deg", type=float, default=MATCH_RADIUS_DEG)
     parser.add_argument("--match-window-minutes", type=int, default=MATCH_WINDOW_MINUTES)
     parser.add_argument("--gap-threshold-hours", type=float, default=GAP_THRESHOLD_H)

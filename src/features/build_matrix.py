@@ -149,7 +149,7 @@ def _empty_eo() -> pl.DataFrame:
 
 def build_feature_matrix(
     db_path: str = DEFAULT_DB_PATH,
-    window_days: int = 30,
+    window_days: int = 60,
     skip_graph: bool = False,
     skip_eo: bool = False,
 ) -> pl.DataFrame:
@@ -265,7 +265,7 @@ def validate_core_columns_non_null(feature_df: pl.DataFrame) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build and persist vessel feature matrix")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
-    parser.add_argument("--window", type=int, default=30)
+    parser.add_argument("--window", type=int, default=60)
     parser.add_argument("--skip-graph", action="store_true")
     parser.add_argument("--skip-eo", action="store_true", help="Skip EO feature computation")
     args = parser.parse_args()
