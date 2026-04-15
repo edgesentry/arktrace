@@ -284,7 +284,9 @@ def _collect_snapshot_files(data_dir: Path) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
-def _build_r2_fs(anonymous: bool = False, endpoint: str | None = None):  # -> pyarrow.fs.S3FileSystem
+def _build_r2_fs(
+    anonymous: bool = False, endpoint: str | None = None
+):  # -> pyarrow.fs.S3FileSystem
     """Build an S3FileSystem for R2.
 
     Pass ``anonymous=True`` for public-bucket reads that need no credentials.
