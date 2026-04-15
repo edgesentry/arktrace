@@ -1082,18 +1082,19 @@ def cmd_push_custom_feeds(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # Use the private bucket custom domain as the S3 endpoint.
-    # The domain IS the bucket, so S3 paths are bare keys — no bucket-name prefix.
-    fs = _build_r2_fs(endpoint=_PRIVATE_ENDPOINT)
-    print(f"Uploading {len(candidates)} file(s) to {_PRIVATE_ENDPOINT}/")
+    # S3 API operations use the account-level R2 endpoint with an explicit bucket
+    # prefix — pyarrow's S3FileSystem does not support custom domains as endpoints.
+    # _PRIVATE_ENDPOINT is the public-facing URL; S3 writes go through _DEFAULT_ENDPOINT.
+    fs = _build_r2_fs()
+    print(f"Uploading {len(candidates)} file(s) to {_PRIVATE_BUCKET}/")
     for local_path in candidates:
-        r2_path = local_path.name  # bare key — bucket implied by custom domain endpoint
+        r2_path = f"{_PRIVATE_BUCKET}/{local_path.name}"
         size_kb = local_path.stat().st_size / 1024
         print(f"  {local_path.name} ({size_kb:.1f} KB) → {r2_path} ...", end="", flush=True)
         _upload_file(fs, local_path, r2_path)
         print(" ✓")
 
-    print(f"\nDone. Custom feeds uploaded to {_PRIVATE_ENDPOINT}/")
+    print(f"\nDone. Custom feeds uploaded to {_PRIVATE_BUCKET}/")
     print("Pull them in CI with: uv run python scripts/sync_r2.py pull-custom-feeds")
     return 0
 
@@ -1120,28 +1121,31 @@ def cmd_pull_custom_feeds(args: argparse.Namespace) -> int:
     feeds_dir = Path(args.feeds_dir)
     feeds_dir.mkdir(parents=True, exist_ok=True)
 
-    # Use the private bucket custom domain as the S3 endpoint.
-    # The domain IS the bucket, so S3 paths are bare keys — no bucket-name prefix.
-    fs = _build_r2_fs(endpoint=_PRIVATE_ENDPOINT)
+    # S3 API operations use the account-level R2 endpoint with an explicit bucket
+    # prefix — pyarrow's S3FileSystem does not support custom domains as endpoints
+    # (FileSelector("") triggers ListBuckets which R2 custom domains reject).
+    # _PRIVATE_ENDPOINT is the public-facing URL; S3 reads go through _DEFAULT_ENDPOINT.
+    fs = _build_r2_fs()
 
-    selector = pafs.FileSelector("", recursive=True)
+    selector = pafs.FileSelector(f"{_PRIVATE_BUCKET}/", recursive=True)
     try:
         infos = fs.get_file_info(selector)
     except Exception as exc:
-        print(f"Error listing {_PRIVATE_ENDPOINT}: {exc}", file=sys.stderr)
+        print(f"Error listing {_PRIVATE_BUCKET}: {exc}", file=sys.stderr)
         return 1
 
     files = [i for i in infos if i.type == pafs.FileType.File]
     if not files:
-        print(f"No files found at {_PRIVATE_ENDPOINT} — nothing to download.")
+        print(f"No files found in {_PRIVATE_BUCKET}/ — nothing to download.")
         return 0
 
-    print(f"Downloading {len(files)} file(s) from {_PRIVATE_ENDPOINT} → {feeds_dir}/")
+    print(f"Downloading {len(files)} file(s) from {_PRIVATE_BUCKET}/ → {feeds_dir}/")
     for info in files:
-        local_path = feeds_dir / info.path
+        rel = info.path.removeprefix(f"{_PRIVATE_BUCKET}/")
+        local_path = feeds_dir / rel
         local_path.parent.mkdir(parents=True, exist_ok=True)
         size_kb = info.size / 1024
-        print(f"  {info.path} ({size_kb:.1f} KB) ...", end="", flush=True)
+        print(f"  {rel} ({size_kb:.1f} KB) ...", end="", flush=True)
         try:
             _download_file(fs, info.path, local_path)
             print(" ✓")
