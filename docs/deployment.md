@@ -15,7 +15,7 @@
 The fastest path. No Python, no uv, no repo clone required.
 
 ```bash
-docker run -p 8000:8000 \
+docker run --name arktrace -p 8000:8000 \
   -v arktrace-data:/root/.arktrace/data \
   ghcr.io/edgesentry/arktrace:latest
 ```
@@ -74,6 +74,14 @@ docker run --gpus all -p 8000:8000 \
   -e LLM_MODEL=Qwen2.5-7B-Instruct-Q4_K_M.gguf \
   ghcr.io/edgesentry/arktrace:latest
 ```
+
+### Update to a new version
+
+```bash
+docker pull ghcr.io/edgesentry/arktrace:latest
+```
+
+Then stop the running container (Ctrl+C or `docker stop arktrace`) and re-run the same `docker run` command. The `arktrace-data` volume is preserved — no data is lost on update.
 
 ### Environment variables
 
