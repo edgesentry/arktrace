@@ -107,6 +107,22 @@ All models below are permissively licensed (Apache 2.0 or MIT) — compatible wi
 
 ---
 
+## Docker — analyst briefs in containers
+
+Inside Docker, llama-server runs **CPU-only** (no GPU acceleration). Briefs work but generation is slower than native. Two options:
+
+**Option A — Anthropic API (recommended for Docker):** Set `LLM_PROVIDER: anthropic` and `LLM_API_KEY` in `docker-compose.yml`. No model download required.
+
+**Option B — Local GGUF model:** Mount a `./models` directory and set `LLM_MODEL` to the GGUF filename. llama-server starts automatically inside the container.
+
+**Metal GPU (macOS):** Metal GPU is not available inside Docker containers on macOS. For GPU-accelerated inference on Apple Silicon, run natively with `bash scripts/run_app.sh`.
+
+**NVIDIA GPU (Linux):** Pass `--gpus all` to `docker run` and use a CUDA-capable llama.cpp build. See [docs/deployment.md](deployment.md) for the full command.
+
+See [docs/deployment.md](deployment.md) → "Enable analyst briefs" for the exact compose snippets.
+
+---
+
 ## Provider: anthropic (remote)
 
 ```bash
