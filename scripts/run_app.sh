@@ -168,6 +168,8 @@ fi
 # Kills uvicorn (and its --reload workers) and llama-server on Ctrl+C or EXIT.
 # Using kill -- -$$ sends SIGTERM to the entire process group, which catches
 # uvicorn's worker subprocesses that survive a direct kill on the parent PID.
+_CLEANED_UP=false
+
 _kill_with_timeout() {
   local pid="$1" timeout="${2:-3}"
   kill "${pid}" 2>/dev/null || return 0          # SIGTERM
@@ -179,6 +181,8 @@ _kill_with_timeout() {
 }
 
 _cleanup() {
+  [[ "${_CLEANED_UP}" == true ]] && return
+  _CLEANED_UP=true
   echo ""
   echo "Shutting down…"
   if [[ -n "${UVICORN_PID:-}" ]]; then
