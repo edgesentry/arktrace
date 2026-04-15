@@ -70,6 +70,12 @@ Commands
                       run after an analyst session to back up / share review decisions
   pull-reviews        download reviews.parquet from R2 and upsert into the local DuckDB
                       vessel_reviews table (conflict resolution: newer reviewed_at wins)
+  push-custom-feeds   upload files from _inputs/custom_feeds/ to the private
+                      arktrace-private-capvista R2 bucket (requires PRIVATE_R2_ACCESS_KEY_ID /
+                      PRIVATE_R2_SECRET_ACCESS_KEY)
+  pull-custom-feeds   download all feed files from the private arktrace-private-capvista R2
+                      bucket into _inputs/custom_feeds/ — credentials required; skips
+                      gracefully when absent (forks / local dev without access)
   list                show all snapshot zips and shared objects in R2
 
 Env vars (loaded from .env automatically)
@@ -95,6 +101,8 @@ Examples
   uv run python scripts/sync_r2.py pull-demo                 # pull demo bundle (no credentials)
   uv run python scripts/sync_r2.py push-reviews              # back up analyst reviews to R2
   uv run python scripts/sync_r2.py pull-reviews              # restore / merge reviews from R2
+  uv run python scripts/sync_r2.py push-custom-feeds         # upload feeds to private bucket
+  uv run python scripts/sync_r2.py pull-custom-feeds         # pull feeds from private bucket
   uv run python scripts/sync_r2.py list                      # show all generations in R2
 """
 
@@ -142,6 +150,11 @@ _SANCTIONS_DB_R2_KEY = "public_eval.duckdb"  # OpenSanctions DB; separate from r
 _WATCHLISTS_R2_KEY = "watchlists.zip"  # lightweight bundle of *_watchlist.parquet files
 _DEMO_R2_KEY = "demo.zip"  # fixed-key public demo bundle; overwritten on every push-demo
 _REVIEWS_R2_KEY = "reviews.parquet"  # analyst review decisions; overwritten on every push-reviews
+
+# Private bucket for proprietary customer feeds (e.g. Cap Vista MPOL data).
+# Uses separate credentials so it is never confused with the public bucket.
+_PRIVATE_BUCKET = "arktrace-private-capvista"
+_PRIVATE_FEEDS_DIR = Path(__file__).resolve().parents[1] / "_inputs" / "custom_feeds"
 
 # Files included in the demo bundle — lightweight artifacts that let developers run the
 # dashboard without re-running the full pipeline.  No heavy DuckDB or Lance files.
@@ -1021,6 +1034,123 @@ def cmd_pull_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def _build_private_r2_fs():  # -> pyarrow.fs.S3FileSystem
+    """Build an S3FileSystem for the private capvista R2 bucket.
+
+    Uses PRIVATE_R2_ACCESS_KEY_ID / PRIVATE_R2_SECRET_ACCESS_KEY env vars so
+    credentials are never mixed with the public bucket's AWS_* vars.
+    """
+    import pyarrow.fs as pafs
+
+    access_key = os.environ["PRIVATE_R2_ACCESS_KEY_ID"]
+    secret_key = os.environ["PRIVATE_R2_SECRET_ACCESS_KEY"]
+    endpoint = os.getenv("S3_ENDPOINT", _DEFAULT_ENDPOINT)
+    host = endpoint.split("://", 1)[-1].rstrip("/")
+    scheme = "https" if endpoint.startswith("https://") else "http"
+    return pafs.S3FileSystem(
+        access_key=access_key,
+        secret_key=secret_key,
+        endpoint_override=host,
+        scheme=scheme,
+        region=os.getenv("AWS_REGION", "auto"),
+    )
+
+
+def cmd_push_custom_feeds(args: argparse.Namespace) -> int:
+    """Upload files from _inputs/custom_feeds/ to the private arktrace-private-capvista bucket.
+
+    Only uploads files whose names do NOT end with ``_sample`` (sample fixtures are
+    local smoke-test data only and must never be pushed to the customer bucket).
+    """
+    bucket = args.bucket
+    feeds_dir = Path(args.feeds_dir)
+
+    if not feeds_dir.exists():
+        print(f"Error: feeds directory does not exist: {feeds_dir}", file=sys.stderr)
+        return 1
+
+    candidates = sorted(
+        f for f in feeds_dir.iterdir()
+        if f.is_file() and not f.stem.endswith("_sample")
+    )
+    if not candidates:
+        print(
+            f"No non-sample feed files found in {feeds_dir}. "
+            "Add CSVs (without _sample suffix) and retry.",
+            file=sys.stderr,
+        )
+        return 1
+
+    fs = _build_private_r2_fs()
+    print(f"Uploading {len(candidates)} file(s) to {bucket}/")
+    for local_path in candidates:
+        r2_path = f"{bucket}/{local_path.name}"
+        size_kb = local_path.stat().st_size / 1024
+        print(f"  {local_path.name} ({size_kb:.1f} KB) → {r2_path} ...", end="", flush=True)
+        _upload_file(fs, local_path, r2_path)
+        print(" ✓")
+
+    print(f"\nDone. Custom feeds uploaded to {bucket}/")
+    print("Pull them in CI with: uv run python scripts/sync_r2.py pull-custom-feeds")
+    return 0
+
+
+def cmd_pull_custom_feeds(args: argparse.Namespace) -> int:
+    """Download all feed files from the private arktrace-private-capvista bucket.
+
+    Extracts files into ``_inputs/custom_feeds/`` so the pipeline's auto-detection
+    step picks them up on the next run.  Skips gracefully when private credentials
+    are absent (forks without access, local dev machines).
+    """
+    access_key = os.getenv("PRIVATE_R2_ACCESS_KEY_ID")
+    secret_key = os.getenv("PRIVATE_R2_SECRET_ACCESS_KEY")
+    if not access_key or not secret_key:
+        print(
+            "[skip] PRIVATE_R2_ACCESS_KEY_ID / PRIVATE_R2_SECRET_ACCESS_KEY not set "
+            "— skipping pull-custom-feeds",
+            file=sys.stderr,
+        )
+        return 0
+
+    import pyarrow.fs as pafs
+
+    bucket = args.bucket
+    feeds_dir = Path(args.feeds_dir)
+    feeds_dir.mkdir(parents=True, exist_ok=True)
+
+    fs = _build_private_r2_fs()
+
+    selector = pafs.FileSelector(f"{bucket}/", recursive=True)
+    try:
+        infos = fs.get_file_info(selector)
+    except Exception as exc:
+        print(f"Error listing {bucket}: {exc}", file=sys.stderr)
+        return 1
+
+    files = [i for i in infos if i.type == pafs.FileType.File]
+    if not files:
+        print(f"No files found in {bucket}/ — nothing to download.")
+        return 0
+
+    print(f"Downloading {len(files)} file(s) from {bucket}/ → {feeds_dir}/")
+    for info in files:
+        # Strip bucket prefix to get just the filename / relative path
+        rel = info.path.removeprefix(f"{bucket}/")
+        local_path = feeds_dir / rel
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        size_kb = info.size / 1024
+        print(f"  {rel} ({size_kb:.1f} KB) ...", end="", flush=True)
+        try:
+            _download_file(fs, info.path, local_path)
+            print(" ✓")
+        except Exception as exc:
+            print(f" ERROR: {exc}", file=sys.stderr)
+
+    print(f"\nDone. Custom feeds extracted to {feeds_dir}/")
+    print("The pipeline will auto-detect and ingest these files on the next run.")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     anon = not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
@@ -1198,6 +1328,49 @@ def main() -> int:
         "--db", default=_DEFAULT_DATA_DIR + "/singapore.duckdb", metavar="DB"
     )
 
+    _default_feeds_dir = str(_PRIVATE_FEEDS_DIR)
+
+    push_custom_feeds_p = sub.add_parser(
+        "push-custom-feeds",
+        help=(
+            "Upload non-sample feed files from _inputs/custom_feeds/ to the private "
+            "arktrace-private-capvista R2 bucket (requires PRIVATE_R2_ACCESS_KEY_ID / "
+            "PRIVATE_R2_SECRET_ACCESS_KEY)"
+        ),
+    )
+    push_custom_feeds_p.add_argument(
+        "--bucket",
+        default=_PRIVATE_BUCKET,
+        metavar="BUCKET",
+        help=f"Private R2 bucket name (default: {_PRIVATE_BUCKET})",
+    )
+    push_custom_feeds_p.add_argument(
+        "--feeds-dir",
+        default=_default_feeds_dir,
+        metavar="DIR",
+        help=f"Local directory containing feed files to upload (default: {_default_feeds_dir})",
+    )
+
+    pull_custom_feeds_p = sub.add_parser(
+        "pull-custom-feeds",
+        help=(
+            "Download feed files from the private arktrace-private-capvista R2 bucket into "
+            "_inputs/custom_feeds/ — skips gracefully when credentials are absent"
+        ),
+    )
+    pull_custom_feeds_p.add_argument(
+        "--bucket",
+        default=_PRIVATE_BUCKET,
+        metavar="BUCKET",
+        help=f"Private R2 bucket name (default: {_PRIVATE_BUCKET})",
+    )
+    pull_custom_feeds_p.add_argument(
+        "--feeds-dir",
+        default=_default_feeds_dir,
+        metavar="DIR",
+        help=f"Local directory to extract feeds into (default: {_default_feeds_dir})",
+    )
+
     sub.add_parser("list", help="List snapshot zips and shared objects in R2")
 
     args = parser.parse_args()
@@ -1206,6 +1379,8 @@ def main() -> int:
 
     load_dotenv()
 
+    # pull-custom-feeds uses its own private credentials (checked inside cmd_pull_custom_feeds)
+    # so it is treated as read_only here to skip the public-bucket credential check.
     read_only = args.command in (
         "pull",
         "pull-gdelt",
@@ -1213,6 +1388,7 @@ def main() -> int:
         "pull-watchlists",
         "pull-demo",
         "pull-reviews",
+        "pull-custom-feeds",
         "list",
     )
     if not _check_env(require_credentials=not read_only):
@@ -1231,6 +1407,8 @@ def main() -> int:
         "pull-demo": cmd_pull_demo,
         "push-reviews": cmd_push_reviews,
         "pull-reviews": cmd_pull_reviews,
+        "push-custom-feeds": cmd_push_custom_feeds,
+        "pull-custom-feeds": cmd_pull_custom_feeds,
         "list": cmd_list,
     }
     return dispatch[args.command](args)

@@ -127,6 +127,16 @@ jobs:
             uv run python scripts/sync_r2.py pull-sanctions-db
           fi
 
+      - name: Pull custom feeds from private R2 bucket
+        # Skip gracefully when private credentials are absent (forks, public PRs).
+        # When present, feeds are extracted to _inputs/custom_feeds/ and the
+        # pipeline auto-detects them in the ingest_custom_feeds step.
+        env:
+          PRIVATE_R2_ACCESS_KEY_ID: ${{ secrets.PRIVATE_R2_ACCESS_KEY_ID }}
+          PRIVATE_R2_SECRET_ACCESS_KEY: ${{ secrets.PRIVATE_R2_SECRET_ACCESS_KEY }}
+        run: |
+          uv run python scripts/sync_r2.py pull-custom-feeds
+
       - name: Run Singapore pipeline (seed mode)
         run: |
           uv run python scripts/run_pipeline.py \
@@ -135,6 +145,10 @@ jobs:
             --seed-dummy
 
       - name: Run public backtest
+        env:
+          # Pipeline wrote watchlists to data/processed/ (not ~/.arktrace/data/).
+          # DATA_DIR tells run_public_backtest_batch where to find them.
+          DATA_DIR: data/processed
         run: |
           uv run python scripts/run_public_backtest_batch.py \
             --regions singapore \
