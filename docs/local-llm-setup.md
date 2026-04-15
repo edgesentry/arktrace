@@ -4,7 +4,7 @@ arktrace supports two LLM providers configured via `.env`. Set `LLM_PROVIDER` to
 
 | `LLM_PROVIDER` | Where it runs | Requires |
 |---|---|---|
-| `openai` *(default)* | Local (mlx-lm) or any OpenAI-compatible API | mlx-lm server or remote endpoint |
+| `openai` *(default)* | Local (llama-server) or any OpenAI-compatible API | llama.cpp installed or remote endpoint |
 | `anthropic` | Remote — Anthropic API | `ANTHROPIC_API_KEY` |
 
 ## What the LLM does in arktrace
@@ -19,31 +19,35 @@ Prompts are short (500–1,200 tokens in, 150–300 out). A 4–7B model is suff
 
 ---
 
-## 🍎 Recommended: Native macOS dev mode (mlx-lm)
+## Recommended: llama.cpp (cross-platform)
 
-`mlx-lm` runs natively on Apple Silicon via the MLX framework and exposes an OpenAI-compatible REST endpoint. The dashboard connects to it as a standard `openai` provider.
+arktrace uses **llama.cpp** (`llama-server`) as its local inference backend. It runs on macOS (Metal), Linux (CPU/CUDA), and Windows — the same stack everywhere.
 
-> **Infra (MinIO) still runs in Docker.** Only the FastAPI process and mlx-lm run on the host.
+The default model is `bartowski/Qwen2.5-7B-Instruct-GGUF` (Q4_K_M quantisation), commercially licensed under Apache 2.0.
 
-### One-time setup
+### One-time installation
 
 ```bash
-uv pip install mlx-lm
+# macOS (Homebrew) — recommended
+brew install llama.cpp
+
+# Other platforms — see full install guide:
+# https://github.com/ggml-org/llama.cpp/blob/master/docs/install.md
 ```
 
 ### Start everything
 
 ```bash
-# Recommended — one command starts MinIO, mlx-lm, and the dashboard:
+# One command — starts llama-server and the dashboard:
 bash scripts/run_app.sh
 
+# Different region:
+bash scripts/run_app.sh --region japan
+
 # Override the default model:
-bash scripts/run_app.sh --model mlx-community/Qwen2.5-7B-Instruct-4bit
+bash scripts/run_app.sh --model bartowski/Qwen2.5-14B-Instruct-GGUF --gguf-file Qwen2.5-14B-Instruct-Q4_K_M.gguf
 
-# Skip Docker infra (MinIO already running):
-bash scripts/run_app.sh --no-infra
-
-# Skip mlx-lm (server already running on port 8080):
+# Skip llama-server (already running on port 8080):
 bash scripts/run_app.sh --no-llm
 
 # Use Anthropic instead of local LLM:
@@ -54,41 +58,52 @@ bash scripts/run_app.sh --provider anthropic
 
 | Flag | Default | Description |
 |---|---|---|
-| `--model MODEL` | `mlx-community/Qwen2.5-7B-Instruct-4bit` | mlx-community model ID or local path |
-| `--provider NAME` | `openai` | `openai` (mlx-lm or remote) or `anthropic` |
+| `--model MODEL` | `bartowski/Qwen2.5-7B-Instruct-GGUF` | HuggingFace repo or local `.gguf` path |
+| `--gguf-file FILE` | `Qwen2.5-7B-Instruct-Q4_K_M.gguf` | GGUF filename within the HF repo |
+| `--provider NAME` | `openai` | `openai` (llama-server) or `anthropic` |
 | `--port PORT` | `8000` | uvicorn port |
-| `--llm-port PORT` | `8080` | mlx-lm server port |
-| `--no-infra` | — | Skip starting Docker infra |
-| `--no-llm` | — | Skip starting mlx-lm server |
+| `--llm-port PORT` | `8080` | llama-server port |
+| `--no-llm` | — | Skip starting llama-server |
 
 ### Manual startup (step-by-step)
 
 ```bash
-# 1. Start MinIO
-docker compose -f docker-compose.infra.yml up -d
+# 1. Start llama-server (downloads model from HuggingFace on first run — ~4 GB)
+llama-server \
+  --hf-repo bartowski/Qwen2.5-7B-Instruct-GGUF \
+  --hf-file Qwen2.5-7B-Instruct-Q4_K_M.gguf \
+  --port 8080 \
+  --ctx-size 4096 \
+  --n-gpu-layers 99 &
 
-# 2. Start mlx-lm server (downloads model on first run — ~4 GB)
-uv run mlx_lm.server --model mlx-community/Qwen2.5-7B-Instruct-4bit --port 8080 &
-
-# 3. Start the dashboard
-S3_ENDPOINT=http://localhost:9000 \
+# 2. Start the dashboard
 LLM_PROVIDER=openai \
 LLM_BASE_URL=http://localhost:8080/v1 \
 LLM_API_KEY=local \
-LLM_MODEL=mlx-community/Qwen2.5-7B-Instruct-4bit \
+LLM_MODEL=Qwen2.5-7B-Instruct-Q4_K_M.gguf \
   uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### Model guide
 
-| Model | Size (4-bit) | Min RAM | Licence | Notes |
-|---|---|---|---|---|
-| `mlx-community/Qwen2.5-7B-Instruct-4bit` | ~4.3 GB | 8 GB | Apache 2.0 | Default — good balance of quality and speed |
-| `mlx-community/Qwen2.5-3B-Instruct-4bit` | ~1.9 GB | 6 GB | Apache 2.0 | Faster, lower RAM |
-| `mlx-community/Phi-4-mini-instruct-4bit` | ~2.4 GB | 8 GB | MIT | No restrictions on government or defence use |
-| `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | ~4.1 GB | 10 GB | Apache 2.0 | Highest quality local option |
+All models below are permissively licensed (Apache 2.0 or MIT) — compatible with arktrace's Apache 2.0 / MIT dual licence and safe for government and defence use.
 
-All models above are permissively licensed — no restrictions on government or defence use.
+| HF repo | GGUF file (Q4_K_M) | Size | Min RAM | Licence | Notes |
+|---|---|---|---|---|---|
+| `bartowski/Qwen2.5-7B-Instruct-GGUF` | `Qwen2.5-7B-Instruct-Q4_K_M.gguf` | ~4.4 GB | 8 GB | **Apache 2.0** | **Default** — best balance of quality and speed |
+| `bartowski/Qwen2.5-3B-Instruct-GGUF` | `Qwen2.5-3B-Instruct-Q4_K_M.gguf` | ~2.0 GB | 6 GB | **Apache 2.0** | Faster, lower RAM; good for briefs |
+| `bartowski/Qwen2.5-14B-Instruct-GGUF` | `Qwen2.5-14B-Instruct-Q4_K_M.gguf` | ~8.5 GB | 16 GB | **Apache 2.0** | Higher quality; recommended if RAM allows |
+| `bartowski/Qwen2.5-Coder-7B-Instruct-GGUF` | `Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf` | ~4.4 GB | 8 GB | **Apache 2.0** | Strong structured/JSON output |
+| `Qwen/Qwen3-8B-GGUF` | `Qwen3-8B-Q4_K_M.gguf` | ~4.9 GB | 8 GB | **Apache 2.0** | Newer generation; strong reasoning |
+| `bartowski/Phi-3.5-mini-instruct-GGUF` | `Phi-3.5-mini-instruct-Q4_K_M.gguf` | ~2.2 GB | 6 GB | **MIT** | Very low RAM; suitable for constrained environments |
+
+**Models to avoid** (licence restrictions):
+
+| Model family | Licence issue |
+|---|---|
+| LLaMA 3.x (Meta) | Meta Community Licence — not OSI-approved; usage restrictions above 700M MAU |
+| Gemma (Google) | Google Gemma ToS — restricts certain government/defence applications |
+| Mistral via `mistral.ai` API | Commercial API ToS applies |
 
 ---
 
@@ -104,7 +119,7 @@ LLM_MODEL=claude-haiku-4-5-20251001   # default — fast and cheap for briefs
 
 ## Provider: openai — remote or any OpenAI-compatible API
 
-Works with OpenAI, Ollama, LM Studio, or any other OpenAI-compatible endpoint.
+Works with OpenAI, LM Studio, or any other OpenAI-compatible endpoint.
 
 ```bash
 # OpenAI
@@ -113,15 +128,9 @@ LLM_BASE_URL=https://api.openai.com/v1
 LLM_API_KEY=sk-...
 LLM_MODEL=gpt-4o-mini
 
-# Ollama
-LLM_PROVIDER=openai
-LLM_BASE_URL=http://localhost:11434/v1
-LLM_API_KEY=local
-LLM_MODEL=qwen2.5:7b
-
-# mlx-lm (already running)
+# llama-server (already running)
 LLM_PROVIDER=openai
 LLM_BASE_URL=http://localhost:8080/v1
 LLM_API_KEY=local
-LLM_MODEL=mlx-community/Qwen2.5-7B-Instruct-4bit
+LLM_MODEL=Qwen2.5-7B-Instruct-Q4_K_M.gguf
 ```

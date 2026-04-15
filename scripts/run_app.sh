@@ -4,26 +4,28 @@
 # Start arktrace in native macOS dev mode.
 #
 #   • Data is read from local disk (pull from R2 first if not present)
-#   • mlx-lm runs as a local OpenAI-compatible server (Apple Silicon, Metal)
-#   • Dashboard runs natively on the host — connects to the mlx-lm server
+#   • llama-server (llama.cpp) runs as a local OpenAI-compatible server
+#   • Dashboard runs natively on the host — connects to the llama-server
 #
 # Prerequisites (one-time):
-#   uv pip install mlx-lm
+#   Install llama.cpp: https://github.com/ggml-org/llama.cpp/blob/master/docs/install.md
+#   macOS (Homebrew): brew install llama.cpp
 #
 # Usage:
 #   bash scripts/run_app.sh
 #   bash scripts/run_app.sh --region japan
-#   bash scripts/run_app.sh --model mlx-community/Qwen2.5-7B-Instruct-4bit
+#   bash scripts/run_app.sh --model bartowski/Qwen2.5-7B-Instruct-GGUF
 #   bash scripts/run_app.sh --provider anthropic   # skip local LLM entirely
 #
 # Options:
 #   --region REGION   Region to serve: singapore|japan|middleeast|europe|gulf
 #                     (default: singapore)
-#   --model MODEL     mlx-community model ID or local path (overrides LLM_MODEL)
-#   --provider NAME   LLM provider: openai (mlx-lm) | anthropic (overrides LLM_PROVIDER)
+#   --model MODEL     HuggingFace repo (bartowski/...) or local .gguf path (overrides LLM_MODEL)
+#   --gguf-file FILE  GGUF filename within the HF repo (default: Qwen2.5-7B-Instruct-Q4_K_M.gguf)
+#   --provider NAME   LLM provider: openai (llama-server) | anthropic (overrides LLM_PROVIDER)
 #   --port PORT       Port for uvicorn (default: 8000)
-#   --llm-port PORT   Port for mlx-lm server (default: 8080)
-#   --no-llm          Skip starting mlx-lm server (assumes it is already running)
+#   --llm-port PORT   Port for llama-server (default: 8080)
+#   --no-llm          Skip starting llama-server (assumes it is already running)
 #   --help            Show this message
 
 set -euo pipefail
@@ -36,16 +38,19 @@ PORT="${PORT:-8000}"
 LLM_PORT="${LLM_PORT:-8080}"
 REGION="singapore"
 START_LLM=true
+HF_MODEL="bartowski/Qwen2.5-7B-Instruct-GGUF"
+GGUF_FILE="Qwen2.5-7B-Instruct-Q4_K_M.gguf"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --region)   REGION="$2";             shift 2 ;;
-    --model)    export LLM_MODEL="$2";   shift 2 ;;
-    --provider) export LLM_PROVIDER="$2"; shift 2 ;;
-    --port)     PORT="$2";               shift 2 ;;
-    --llm-port) LLM_PORT="$2";           shift 2 ;;
-    --no-llm)   START_LLM=false;         shift   ;;
+    --region)    REGION="$2";              shift 2 ;;
+    --model)     HF_MODEL="$2";            shift 2 ;;
+    --gguf-file) GGUF_FILE="$2";           shift 2 ;;
+    --provider)  export LLM_PROVIDER="$2"; shift 2 ;;
+    --port)      PORT="$2";                shift 2 ;;
+    --llm-port)  LLM_PORT="$2";            shift 2 ;;
+    --no-llm)    START_LLM=false;          shift   ;;
     --help|-h)
       sed -n '/^# Usage/,/^[^#]/{ /^[^#]/d; s/^# \{0,2\}//; p }' "$0"
       exit 0
@@ -92,45 +97,74 @@ if [[ ! -f "${WATCHLIST}" ]]; then
   echo ""
 fi
 
-# ── Start mlx-lm server ───────────────────────────────────────────────────────
+# ── Start llama-server ────────────────────────────────────────────────────────
 PROVIDER="${LLM_PROVIDER:-openai}"
-MODEL="${LLM_MODEL:-mlx-community/Qwen2.5-7B-Instruct-4bit}"
 
 if [[ "${START_LLM}" == true && "${PROVIDER}" != "anthropic" ]]; then
-  if ! uv run python -c "import mlx_lm" 2>/dev/null; then
-    echo "⬇️  mlx-lm not found. Installing…"
-    uv pip install mlx-lm
+  if ! command -v llama-server &>/dev/null; then
+    echo "❌ llama-server not found."
+    echo ""
+    echo "   Please install llama.cpp first:"
+    echo "     macOS (Homebrew): brew install llama.cpp"
+    echo "     Other platforms:  https://github.com/ggml-org/llama.cpp/blob/master/docs/install.md"
+    echo ""
+    echo "   Then re-run: bash scripts/run_app.sh"
+    exit 1
   fi
 
-  echo "🤖 Starting mlx-lm server on port ${LLM_PORT}…"
-  echo "   Model: ${MODEL}"
-  uv run mlx_lm.server \
-    --model "${MODEL}" \
+  echo "🤖 Starting llama-server on port ${LLM_PORT}…"
+  echo "   Model: ${HF_MODEL} (${GGUF_FILE})"
+  llama-server \
+    --hf-repo "${HF_MODEL}" \
+    --hf-file "${GGUF_FILE}" \
     --port "${LLM_PORT}" \
+    --ctx-size 4096 \
+    --n-gpu-layers 99 \
     &
-  MLX_PID=$!
-  echo "   mlx-lm PID: ${MLX_PID}"
+  LLM_PID=$!
+  echo "   llama-server PID: ${LLM_PID}"
   echo "   Waiting for server to be ready…"
+  LLAMA_READY=false
   for i in $(seq 1 30); do
     if curl -sf "http://localhost:${LLM_PORT}/v1/models" > /dev/null 2>&1; then
-      echo "   ✅ mlx-lm ready → http://localhost:${LLM_PORT}/v1"
+      LLAMA_READY=true
       break
     fi
     sleep 2
     if [[ $i -eq 30 ]]; then
-      echo "   ⚠️  mlx-lm did not respond in 60s — dashboard will start anyway"
+      echo "   ⚠️  llama-server did not respond in 60s — dashboard will start anyway"
     fi
   done
+
+  if [[ "${LLAMA_READY}" == true ]]; then
+    # Verify /v1/chat/completions is available — older llama.cpp returns 404 here.
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+      -X POST "http://localhost:${LLM_PORT}/v1/chat/completions" \
+      -H "Content-Type: application/json" \
+      -d '{"model":"test","messages":[{"role":"user","content":"ping"}],"max_tokens":1}' \
+      2>/dev/null || echo "000")
+    if [[ "${HTTP_STATUS}" == "404" ]]; then
+      echo ""
+      echo "   ❌ llama-server is running but /v1/chat/completions returned 404."
+      echo "      Your llama.cpp is outdated. Upgrade it and retry:"
+      echo "        brew upgrade llama.cpp"
+      echo "      Then re-run: bash scripts/run_app.sh"
+      echo ""
+      kill "${LLM_PID}" 2>/dev/null || true
+      exit 1
+    fi
+    echo "   ✅ llama-server ready → http://localhost:${LLM_PORT}/v1"
+  fi
   echo ""
 
-  # Point the dashboard at the local mlx-lm server
+  # Point the dashboard at the local llama-server
   export LLM_PROVIDER="openai"
   export LLM_BASE_URL="http://localhost:${LLM_PORT}/v1"
   export LLM_API_KEY="${LLM_API_KEY:-local}"
-  export LLM_MODEL="${MODEL}"
+  export LLM_MODEL="${GGUF_FILE}"
 
-  # Shut down mlx-lm when the script exits
-  trap 'echo ""; echo "Stopping mlx-lm (PID ${MLX_PID})…"; kill "${MLX_PID}" 2>/dev/null || true' EXIT
+  # Shut down llama-server when the script exits
+  trap 'echo ""; echo "Stopping llama-server (PID ${LLM_PID})…"; kill "${LLM_PID}" 2>/dev/null || true' EXIT
 fi
 
 # ── Print config summary ───────────────────────────────────────────────────────
@@ -140,7 +174,7 @@ echo "   Data dir      = ${DATA_DIR}"
 echo "   DB_PATH       = ${DB_PATH}"
 echo "   LLM_PROVIDER  = ${LLM_PROVIDER:-openai}"
 echo "   LLM_BASE_URL  = ${LLM_BASE_URL:-http://localhost:${LLM_PORT}/v1}"
-echo "   LLM_MODEL     = ${LLM_MODEL:-${MODEL}}"
+echo "   LLM_MODEL     = ${LLM_MODEL:-${GGUF_FILE}}"
 echo "   Dashboard     → http://localhost:${PORT}"
 echo ""
 
