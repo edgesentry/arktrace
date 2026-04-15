@@ -26,7 +26,7 @@ LOG_DIR="$HOME/.arktrace"
 DOT_ENV="$PROJECT_ROOT/.env"
 
 LABEL_PREFIX="io.arktrace.aisstream"
-ALL_REGIONS=(singapore japansea gulf europe middleeast hornofafrica)
+ALL_REGIONS=(singapore japansea gulf europe middleeast hornofafrica blacksea)
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -237,6 +237,7 @@ Commands:
 Regions: ${ALL_REGIONS[*]}
 
 NOTE: aisstream.io free tier supports max ~3 concurrent streams.
+      hornofafrica and middleeast show poor coverage on the free tier.
       Starting more will trigger HTTP 429 rate limiting.
 
 Examples:
