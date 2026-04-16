@@ -110,7 +110,7 @@ Defaults to the **Singapore / Malacca Strait** region with no live AIS streaming
 
 | Env var / flag | Default | Description |
 |---|---|---|
-| `PIPELINE_REGION` | `singapore` | Region preset: `singapore`, `japan`, `middleeast`, `europe`, `gulf` |
+| `PIPELINE_REGION` | `singapore` | Region preset: `singapore`, `japan`, `middleeast`, `europe`, `persiangulf`, `blacksea`, `gulfofaden`, `gulfofguinea`, `gulfofmexico` |
 | `PIPELINE_STREAM_DURATION` | _(unset)_ | Seconds of live AIS to collect |
 | `--gdelt-days N` | `3` | Days of GDELT events to ingest |
 | `--marine-cadastre-year YEAR` | _(unset)_ | Load a historical Marine Cadastre year (repeatable; uses region bbox automatically) |
@@ -125,10 +125,10 @@ PIPELINE_REGION=japan docker compose run --rm pipeline
 # Collect 5 minutes of live AIS
 PIPELINE_REGION=singapore PIPELINE_STREAM_DURATION=300 docker compose run --rm pipeline
 
-# Gulf region with 2023 historical Marine Cadastre backfill
-PIPELINE_REGION=gulf docker compose run --rm pipeline \
+# Gulf of Mexico region with 2023 historical Marine Cadastre backfill
+PIPELINE_REGION=gulfofmexico docker compose run --rm pipeline \
   uv run python scripts/run_pipeline.py \
-  --region gulf --non-interactive --marine-cadastre-year 2023
+  --region gulfofmexico --non-interactive --marine-cadastre-year 2023
 ```
 
 See `docs/regional-playbooks.md` for per-region configuration details.

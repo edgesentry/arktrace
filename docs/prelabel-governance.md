@@ -46,7 +46,7 @@ Every pre-label entry must include:
 | `imo` | IMO number where known |
 | `pre_label` | One of `suspected-positive`, `uncertain`, `analyst-negative` |
 | `confidence_tier` | One of `high`, `medium`, `weak` |
-| `region` | One of `singapore`, `middleeast`, `europe`, `japan`, `gulf` |
+| `region` | One of `singapore`, `middleeast`, `europe`, `japan`, `persiangulf`, `blacksea`, `gulfofaden`, `gulfofguinea`, `gulfofmexico` |
 | `evidence_notes` | Human-readable summary of the evidence basis (mandatory) |
 | `source_urls` | At least one URL or internal report reference for `high`/`medium` labels |
 | `analyst_id` | Analyst identifier (e.g. `analyst-a`) |

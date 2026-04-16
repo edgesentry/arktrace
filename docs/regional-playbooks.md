@@ -203,7 +203,7 @@ Override the bbox to the Gulf of Mexico and Caribbean:
 
 ```bash
 uv run python src/ingest/ais_stream.py \
-  --bbox 8 -98 32 -60 --db data/processed/gulf.duckdb
+  --bbox 8 -98 32 -60 --db data/processed/gulfofmexico.duckdb
 # Gulf of Mexico + Caribbean + Venezuelan approaches
 ```
 
@@ -219,15 +219,15 @@ uv run python src/ingest/ais_stream.py \
 This is the one region where Marine Cadastre is directly useful. Pass `--marine-cadastre-year` to the pipeline, and it runs automatically using the Gulf bounding box:
 
 ```bash
-PIPELINE_REGION=gulf docker compose run --rm pipeline \
+PIPELINE_REGION=gulfofmexico docker compose run --rm pipeline \
   uv run python scripts/run_pipeline.py \
-  --region gulf --non-interactive \
+  --region gulfofmexico --non-interactive \
   --marine-cadastre-year 2023
 
 # Multiple years
-PIPELINE_REGION=gulf docker compose run --rm pipeline \
+PIPELINE_REGION=gulfofmexico docker compose run --rm pipeline \
   uv run python scripts/run_pipeline.py \
-  --region gulf --non-interactive \
+  --region gulfofmexico --non-interactive \
   --marine-cadastre-year 2022 --marine-cadastre-year 2023
 ```
 
@@ -236,9 +236,9 @@ PIPELINE_REGION=gulf docker compose run --rm pipeline \
 Use a shorter window for US coastal traffic — vessels transit faster and more frequently:
 
 ```bash
-DB_PATH=data/processed/gulf.duckdb \
+DB_PATH=data/processed/gulfofmexico.duckdb \
   uv run python src/features/ais_behavior.py \
-  --db data/processed/gulf.duckdb \
+  --db data/processed/gulfofmexico.duckdb \
   --window 14
 ```
 
@@ -248,7 +248,7 @@ For US/OFAC analysis, ownership graph proximity is less discriminating (more ves
 
 ```bash
 uv run python src/score/composite.py \
-  --db data/processed/gulf.duckdb \
+  --db data/processed/gulfofmexico.duckdb \
   --w-anomaly 0.50 --w-graph 0.30 --w-identity 0.20
 ```
 
@@ -278,7 +278,7 @@ WATCHLIST_OUTPUT_PATH=data/processed/gulf_watchlist.parquet \
 
 ```bash
 uv run python src/score/composite.py \
-  --db data/processed/gulf.duckdb \
+  --db data/processed/gulfofmexico.duckdb \
   --w-anomaly 0.50 --w-graph 0.30 --w-identity 0.20
 ```
 
@@ -293,8 +293,8 @@ DB_PATH=data/processed/japansea.duckdb uv run python src/ingest/ais_stream.py \
   --bbox 25 115 48 145 --db data/processed/japansea.duckdb
 
 # Terminal 3 — Gulf
-DB_PATH=data/processed/gulf.duckdb uv run python src/ingest/ais_stream.py \
-  --bbox 8 -98 32 -60 --db data/processed/gulf.duckdb
+DB_PATH=data/processed/gulfofmexico.duckdb uv run python src/ingest/ais_stream.py \
+  --bbox 8 -98 32 -60 --db data/processed/gulfofmexico.duckdb
 ```
 
 Each region gets its own DuckDB file. Run the full feature + scoring pipeline separately for each by passing `--db` to every script.
