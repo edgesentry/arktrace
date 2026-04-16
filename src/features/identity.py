@@ -190,7 +190,11 @@ def compute_identity_features(db_path: str = DEFAULT_DB_PATH) -> pl.DataFrame:
     depth_df = _compute_ownership_depth(tables)
     hrisk_df = _compute_high_risk_flag_ratio(tables)
 
-    # flag_changes_2y: from DuckDB vessel_meta (0 where full history unavailable)
+    # flag_changes_2y: hardcoded to 0 — historical flag-state records are not yet
+    # ingested. This is an intentional deferral, not a broken feature.
+    # TODO (Phase C): ingest flag-state history from VesselFinder / MarineTraffic
+    # historical API or manual EQUASIS export, then remove this pl.lit(0) hardcode.
+    # See docs/roadmap.md § A3 and arktrace#296.
     con = duckdb.connect(db_path, read_only=True)
     try:
         meta = con.execute(

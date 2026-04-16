@@ -37,7 +37,8 @@
 **Goal:** Full feature matrix computed for all vessels in the area of interest.
 
 - AIS behavioral features (Polars): `ais_gap_count_30d` (with configurable `--gap-threshold-hours`), `position_jump_count`, `sts_candidate_count`, `loitering_hours_30d` (`src/features/ais_behavior.py`)
-- Identity volatility features: `flag_changes_2y`, `name_changes_2y`, `owner_changes_2y` (`src/features/identity.py`)
+- Identity volatility features: `name_changes_2y`, `owner_changes_2y` (`src/features/identity.py`)
+- **[TODO — Phase C]** `flag_changes_2y` — count of flag-state changes over 24 months. Currently hardcoded to 0 (see `src/features/identity.py`). **Pre-requisite:** ingest historical flag-state records from an external source (e.g., VesselFinder/MarineTraffic historical flag API, or manual EQUASIS export). Once available, remove the `pl.lit(0)` hardcode. See #296.
 - Ownership graph features (Lance Graph + Polars joins): `sanctions_distance`, `cluster_sanctions_ratio` (`src/features/ownership_graph.py`)
 - Trade flow mismatch: `route_cargo_mismatch` (`src/features/trade_mismatch.py`)
 - **[TODO]** GEBCO bathymetric mask (`src/features/bathymetric_mask.py`) — provides higher-precision STS candidate filtering than the current 5nm-from-port heuristic.
