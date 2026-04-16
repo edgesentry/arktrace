@@ -8,7 +8,8 @@
 #   scripts/aisstream_agents.sh status                 # show running agents + record counts
 #   scripts/aisstream_agents.sh logs  <region>         # tail logs for one region
 #
-# Regions: singapore  japansea  gulf  europe  middleeast  hornofafrica
+# Regions: singapore  japansea  persiangulf  europe  middleeast  hornofafrica  blacksea
+#          gulfofguinea  gulfofaden  gulfofmexico
 #
 # NOTE: max 3 concurrent streams on the aisstream.io free tier — 429s will occur above that.
 #
@@ -26,7 +27,7 @@ LOG_DIR="$HOME/.arktrace"
 DOT_ENV="$PROJECT_ROOT/.env"
 
 LABEL_PREFIX="io.arktrace.aisstream"
-ALL_REGIONS=(singapore japansea gulf europe middleeast hornofafrica blacksea)
+ALL_REGIONS=(singapore japansea persiangulf europe middleeast hornofafrica blacksea gulfofguinea gulfofaden gulfofmexico)
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -242,8 +243,8 @@ NOTE: aisstream.io free tier supports max ~3 concurrent streams.
 
 Examples:
   scripts/aisstream_agents.sh init
-  scripts/aisstream_agents.sh start singapore japansea gulf
-  scripts/aisstream_agents.sh stop gulf
+  scripts/aisstream_agents.sh start singapore japansea persiangulf
+  scripts/aisstream_agents.sh stop persiangulf
   scripts/aisstream_agents.sh status
   scripts/aisstream_agents.sh logs singapore
 EOF

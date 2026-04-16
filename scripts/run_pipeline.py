@@ -8,7 +8,7 @@ Usage (non-interactive):
     uv run python scripts/run_pipeline.py --region singapore --non-interactive
     uv run python scripts/run_pipeline.py --region japan --non-interactive
 
-Available regions: singapore, japan, middleeast, europe, gulf
+Available regions: singapore, japan, middleeast, europe, persiangulf
 """
 
 from __future__ import annotations
@@ -87,17 +87,53 @@ PRESETS: dict[str, RegionPreset] = {
         db_path="data/processed/europe.duckdb",
         watchlist_path="data/processed/europe_watchlist.parquet",
     ),
-    "gulf": RegionPreset(
-        name="gulf",
-        label="US Gulf / Caribbean",
-        bbox=[8, -98, 32, -60],
+    "persiangulf": RegionPreset(
+        name="persiangulf",
+        label="Persian Gulf / Strait of Hormuz / Gulf of Oman",
+        bbox=[20, 48, 30, 65],
         gap_threshold_h=6,
         window_days=14,
         w_anomaly=0.50,
         w_graph=0.30,
         w_identity=0.20,
-        db_path="data/processed/gulf.duckdb",
-        watchlist_path="data/processed/gulf_watchlist.parquet",
+        db_path="data/processed/persiangulf.duckdb",
+        watchlist_path="data/processed/persiangulf_watchlist.parquet",
+    ),
+    "gulfofguinea": RegionPreset(
+        name="gulfofguinea",
+        label="Gulf of Guinea — West Africa",
+        bbox=[-5, -5, 10, 10],
+        gap_threshold_h=6,
+        window_days=14,
+        w_anomaly=0.50,
+        w_graph=0.30,
+        w_identity=0.20,
+        db_path="data/processed/gulfofguinea.duckdb",
+        watchlist_path="data/processed/gulfofguinea_watchlist.parquet",
+    ),
+    "gulfofaden": RegionPreset(
+        name="gulfofaden",
+        label="Gulf of Aden / Bab-el-Mandeb",
+        bbox=[10, 42, 16, 52],
+        gap_threshold_h=6,
+        window_days=14,
+        w_anomaly=0.50,
+        w_graph=0.30,
+        w_identity=0.20,
+        db_path="data/processed/gulfofaden.duckdb",
+        watchlist_path="data/processed/gulfofaden_watchlist.parquet",
+    ),
+    "gulfofmexico": RegionPreset(
+        name="gulfofmexico",
+        label="Gulf of Mexico / Venezuela oil routes",
+        bbox=[18, -98, 31, -80],
+        gap_threshold_h=6,
+        window_days=14,
+        w_anomaly=0.50,
+        w_graph=0.30,
+        w_identity=0.20,
+        db_path="data/processed/gulfofmexico.duckdb",
+        watchlist_path="data/processed/gulfofmexico_watchlist.parquet",
     ),
 }
 
@@ -788,7 +824,7 @@ def main() -> None:
         default=None,
         help="Load a Marine Cadastre historical year before the live pipeline runs "
         "(repeat for multiple years, e.g. --marine-cadastre-year 2022 --marine-cadastre-year 2023). "
-        "Uses the region bbox automatically. Useful for the gulf region.",
+        "Uses the region bbox automatically. Useful for the persiangulf region.",
     )
     parser.add_argument(
         "--geopolitical-event-filter",

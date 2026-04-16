@@ -46,7 +46,10 @@ WATCHLIST_BY_REGION: dict[str, Path] = {
     "japan": _watchlist_dir / "japansea_watchlist.parquet",
     "middleeast": _watchlist_dir / "middleeast_watchlist.parquet",
     "europe": _watchlist_dir / "europe_watchlist.parquet",
-    "gulf": _watchlist_dir / "gulf_watchlist.parquet",
+    "persiangulf": _watchlist_dir / "persiangulf_watchlist.parquet",
+    "gulfofguinea": _watchlist_dir / "gulfofguinea_watchlist.parquet",
+    "gulfofaden": _watchlist_dir / "gulfofaden_watchlist.parquet",
+    "gulfofmexico": _watchlist_dir / "gulfofmexico_watchlist.parquet",
 }
 
 
@@ -71,7 +74,7 @@ def _run_pipeline_for_region(
         cmd.extend(["--stream-duration", str(stream_duration)])
     if seed_dummy:
         cmd.append("--seed-dummy")
-    if marine_cadastre_year is not None and region == "gulf":
+    if marine_cadastre_year is not None and region == "persiangulf":
         cmd.extend(["--marine-cadastre-year", str(marine_cadastre_year)])
 
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -224,7 +227,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run public-data backtest integration batch")
     parser.add_argument(
         "--regions",
-        default="singapore,japan,middleeast,europe,gulf",
+        default="singapore,japan,middleeast,europe,persiangulf,gulfofguinea,gulfofaden,gulfofmexico",
         help="Comma-separated region list",
     )
     parser.add_argument("--gdelt-days", type=int, default=14)

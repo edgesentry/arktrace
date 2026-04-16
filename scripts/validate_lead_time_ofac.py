@@ -67,7 +67,10 @@ WATCHLIST_BY_REGION = {
     "singapore": _watchlist_dir / "singapore_watchlist.parquet",
     "japan": _watchlist_dir / "japansea_watchlist.parquet",
     "europe": _watchlist_dir / "europe_watchlist.parquet",
-    "gulf": _watchlist_dir / "gulf_watchlist.parquet",
+    "persiangulf": _watchlist_dir / "persiangulf_watchlist.parquet",
+    "gulfofguinea": _watchlist_dir / "gulfofguinea_watchlist.parquet",
+    "gulfofaden": _watchlist_dir / "gulfofaden_watchlist.parquet",
+    "gulfofmexico": _watchlist_dir / "gulfofmexico_watchlist.parquet",
     "middleeast": _watchlist_dir / "middleeast_watchlist.parquet",
 }
 
