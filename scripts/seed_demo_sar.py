@@ -43,24 +43,27 @@ def main() -> None:
     if SAR_MMSI not in df["mmsi"].to_list():
         raise SystemExit(f"MMSI {SAR_MMSI} not found in watchlist.")
 
-    # Also raise confidence so the vessel clears the dashboard min_confidence=0.4 filter
-    # (without a high score the row never renders in /api/watchlist/top and the
-    # capture_sar_shap Playwright selector finds no matching tr.watchlist-row).
-    updated = df.with_columns(
-        pl.when(pl.col("mmsi") == SAR_MMSI)
-        .then(pl.lit(json.dumps(SAR_SIGNALS)))
-        .otherwise(pl.col("top_signals"))
-        .alias("top_signals"),
-        pl.when(pl.col("mmsi") == SAR_MMSI)
-        .then(pl.lit(0.85).cast(pl.Float64))
-        .otherwise(pl.col("confidence"))
-        .alias("confidence"),
+    # Also raise confidence so the vessel clears the dashboard min_confidence=0.4 filter.
+    # Then sort by confidence descending so the vessel appears in head(top_n) — the
+    # watchlist/top endpoint uses head() without a sort, so file order is the rank order.
+    updated = (
+        df.with_columns(
+            pl.when(pl.col("mmsi") == SAR_MMSI)
+            .then(pl.lit(json.dumps(SAR_SIGNALS)))
+            .otherwise(pl.col("top_signals"))
+            .alias("top_signals"),
+            pl.when(pl.col("mmsi") == SAR_MMSI)
+            .then(pl.lit(0.85).cast(pl.Float64))
+            .otherwise(pl.col("confidence"))
+            .alias("confidence"),
+        )
+        .sort("confidence", descending=True)
     )
 
     write_parquet(updated, WATCHLIST_URI)
     print(f"Injected SAR signals for MMSI {SAR_MMSI} into {WATCHLIST_URI}")
     print("  Top signal: unmatched_sar_detections_30d = 3 (contribution 0.24)")
-    print("  confidence boosted to 0.85 (required for dashboard min_confidence=0.4 filter)")
+    print("  confidence boosted to 0.85 (sorted to rank 1 so it appears in watchlist/top)")
 
 
 if __name__ == "__main__":
