@@ -127,8 +127,12 @@ def capture_dispatch_brief(page, out: Path) -> None:
     page.locator("#dispatch-brief-btn").click()
     # Wait for the modal and brief body to load
     page.wait_for_selector("#dispatch-modal", state="visible", timeout=10_000)
+    # Wait until the body has real content: > 5 chars AND no longer in "Loading…" state.
+    # Original threshold (> 50) missed the 30-char error string; > 5 alone catches
+    # "Loading…" (10 chars) too early — combining both guards handles all states.
     page.wait_for_function(
-        "document.getElementById('dispatch-brief-body').innerText.length > 5",
+        "document.getElementById('dispatch-brief-body').innerText.length > 5 "
+        "&& !document.getElementById('dispatch-brief-body').innerText.includes('Loading')",
         timeout=20_000,
     )
     time.sleep(0.5)
