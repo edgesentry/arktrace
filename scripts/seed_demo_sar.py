@@ -1,8 +1,11 @@
 """Inject SAR demo signals into the processed watchlist for the Cap Vista screenshot.
 
-Modifies SARI NOUR (MMSI 613115678) in data/processed/candidate_watchlist.parquet
-to include unmatched_sar_detections_30d as the top SHAP signal.  Run this after
-use_demo_watchlist.py and before capture_screenshots.py.
+Modifies SARI NOUR (MMSI 613115678) in the active dashboard watchlist
+(watchlist_uri() — singapore_watchlist.parquet by default) to include
+unmatched_sar_detections_30d as the top SHAP signal and boosts confidence
+to 0.85 so the vessel clears the dashboard min_confidence=0.4 filter.
+
+Run this after use_demo_watchlist.py and before capture_screenshots.py.
 
 Usage:
     uv run python scripts/seed_demo_sar.py
@@ -14,9 +17,9 @@ import json
 
 import polars as pl
 
-from src.storage.config import output_uri, read_parquet, write_parquet
+from src.storage.config import read_parquet, watchlist_uri, write_parquet
 
-WATCHLIST_URI = output_uri("candidate_watchlist.parquet")
+WATCHLIST_URI = watchlist_uri()
 SAR_MMSI = "613115678"
 
 SAR_SIGNALS = [
@@ -33,22 +36,31 @@ def main() -> None:
     if df is None:
         raise SystemExit(
             f"Watchlist not found at {WATCHLIST_URI}. "
-            "Run: uv run python scripts/use_demo_watchlist.py --backup"
+            "Run: uv run python scripts/use_demo_watchlist.py --backup\n"
+            "or: uv run python scripts/sync_r2.py pull-demo"
         )
 
     if SAR_MMSI not in df["mmsi"].to_list():
         raise SystemExit(f"MMSI {SAR_MMSI} not found in watchlist.")
 
+    # Also raise confidence so the vessel clears the dashboard min_confidence=0.4 filter
+    # (without a high score the row never renders in /api/watchlist/top and the
+    # capture_sar_shap Playwright selector finds no matching tr.watchlist-row).
     updated = df.with_columns(
         pl.when(pl.col("mmsi") == SAR_MMSI)
         .then(pl.lit(json.dumps(SAR_SIGNALS)))
         .otherwise(pl.col("top_signals"))
-        .alias("top_signals")
+        .alias("top_signals"),
+        pl.when(pl.col("mmsi") == SAR_MMSI)
+        .then(pl.lit(0.85).cast(pl.Float64))
+        .otherwise(pl.col("confidence"))
+        .alias("confidence"),
     )
 
     write_parquet(updated, WATCHLIST_URI)
     print(f"Injected SAR signals for MMSI {SAR_MMSI} into {WATCHLIST_URI}")
     print("  Top signal: unmatched_sar_detections_30d = 3 (contribution 0.24)")
+    print("  confidence boosted to 0.85 (required for dashboard min_confidence=0.4 filter)")
 
 
 if __name__ == "__main__":

@@ -75,15 +75,16 @@ def capture_causal_badge(page, out: Path) -> None:
     goto(page, BASE_URL)
     wait_for_dashboard(page)
     page.locator("#watchlist-tbody tr.watchlist-row").first.click()
-    # Wait for causal badge or att-badge element
+    # Wait for SHAP table first (ensures review panel content has loaded)
+    page.wait_for_selector(".shap-table", timeout=10_000)
+    # Then wait for causal badge; fall back gracefully if causal_effects.parquet is absent
     try:
         page.wait_for_selector(".att-badge, .causal-badge", timeout=8_000)
     except Exception:
         print(
-            "  WARNING: causal badge not found — #43 may not be merged yet; "
-            "falling back to full review panel"
+            "  WARNING: causal badge not found — causal_effects.parquet may be missing; "
+            "run seed_demo_causal_effects.py and retry"
         )
-    time.sleep(0.5)
     panel = page.locator("#review-panel")
     panel.screenshot(path=str(out))
     print(f"  saved {out.name}")
@@ -127,7 +128,7 @@ def capture_dispatch_brief(page, out: Path) -> None:
     # Wait for the modal and brief body to load
     page.wait_for_selector("#dispatch-modal", state="visible", timeout=10_000)
     page.wait_for_function(
-        "document.getElementById('dispatch-brief-body').innerText.length > 50",
+        "document.getElementById('dispatch-brief-body').innerText.length > 5",
         timeout=20_000,
     )
     time.sleep(0.5)
