@@ -46,19 +46,16 @@ def main() -> None:
     # Also raise confidence so the vessel clears the dashboard min_confidence=0.4 filter.
     # Then sort by confidence descending so the vessel appears in head(top_n) — the
     # watchlist/top endpoint uses head() without a sort, so file order is the rank order.
-    updated = (
-        df.with_columns(
-            pl.when(pl.col("mmsi") == SAR_MMSI)
-            .then(pl.lit(json.dumps(SAR_SIGNALS)))
-            .otherwise(pl.col("top_signals"))
-            .alias("top_signals"),
-            pl.when(pl.col("mmsi") == SAR_MMSI)
-            .then(pl.lit(0.85).cast(pl.Float64))
-            .otherwise(pl.col("confidence"))
-            .alias("confidence"),
-        )
-        .sort("confidence", descending=True)
-    )
+    updated = df.with_columns(
+        pl.when(pl.col("mmsi") == SAR_MMSI)
+        .then(pl.lit(json.dumps(SAR_SIGNALS)))
+        .otherwise(pl.col("top_signals"))
+        .alias("top_signals"),
+        pl.when(pl.col("mmsi") == SAR_MMSI)
+        .then(pl.lit(0.85).cast(pl.Float64))
+        .otherwise(pl.col("confidence"))
+        .alias("confidence"),
+    ).sort("confidence", descending=True)
 
     write_parquet(updated, WATCHLIST_URI)
     print(f"Injected SAR signals for MMSI {SAR_MMSI} into {WATCHLIST_URI}")
