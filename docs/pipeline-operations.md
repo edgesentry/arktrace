@@ -59,7 +59,11 @@ See [Backtracking Runbook](backtracking-runbook.md) for full options, output for
 | Japan Sea / DPRK | `japan` | `japansea.duckdb` | 12 h | 60 d | 0.40 / 0.40 / 0.20 |
 | Middle East | `middleeast` | `middleeast.duckdb` | 12 h | 60 d | 0.40 / 0.40 / 0.20 |
 | Europe / Baltic | `europe` | `europe.duckdb` | 6 h | 45 d | 0.35 / 0.35 / 0.30 |
-| US Gulf | `gulf` | `gulf.duckdb` | 6 h | 14 d | 0.50 / 0.30 / 0.20 |
+| Persian Gulf / Hormuz | `persiangulf` | `persiangulf.duckdb` | 6 h | 14 d | 0.50 / 0.30 / 0.20 |
+| Black Sea / Bosphorus | `blacksea` | `blacksea.duckdb` | 6 h | 30 d | 0.45 / 0.35 / 0.20 |
+| Gulf of Aden | `gulfofaden` | `gulfofaden.duckdb` | 6 h | 14 d | 0.50 / 0.30 / 0.20 |
+| Gulf of Guinea | `gulfofguinea` | `gulfofguinea.duckdb` | 6 h | 14 d | 0.50 / 0.30 / 0.20 |
+| Gulf of Mexico | `gulfofmexico` | `gulfofmexico.duckdb` | 6 h | 14 d | 0.50 / 0.30 / 0.20 |
 
 The preset weights are starting points. The pipeline auto-calibrates `w_graph` on every run via `_calibrate_graph_weight()`. Calling `src.score.composite` standalone still requires `--w-graph` (or the new `--auto-calibrate` flag). The calibrated value is printed at the end of Step 8 for reference.
 
@@ -101,7 +105,7 @@ Without `--stream-duration`, non-interactive mode skips live streaming entirely.
 Only available for US-covered regions (Gulf of Mexico and US coastal waters). Repeat for multiple years.
 
 ```bash
-uv run python scripts/run_pipeline.py --region gulf \
+uv run python scripts/run_pipeline.py --region gulfofmexico \
   --non-interactive \
   --marine-cadastre-year 2022 \
   --marine-cadastre-year 2023
@@ -289,9 +293,9 @@ All configurable paths are also settable via environment variables (useful in Do
 PIPELINE_REGION=singapore docker compose run --rm pipeline
 
 # With historical backfill
-PIPELINE_REGION=gulf docker compose run --rm pipeline \
+PIPELINE_REGION=gulfofmexico docker compose run --rm pipeline \
   uv run python scripts/run_pipeline.py \
-  --region gulf --non-interactive \
+  --region gulfofmexico --non-interactive \
   --marine-cadastre-year 2023
 
 # Dashboard only (after pipeline has run)

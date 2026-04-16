@@ -86,7 +86,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │  CI DATA PUBLISHING  (data-publish.yml — weekly + on-merge)     │
 │                                                                 │
-│  Runs full pipeline (all 5 regions, seed mode + custom feeds)   │
+│  Runs backtest on active regions (seed mode + custom feeds)      │
 │  then pushes artifacts to arktrace-public (Cloudflare R2):      │
 │                                                                 │
 │  · <timestamp>.zip  ── generation zip (all region artifacts)    │
