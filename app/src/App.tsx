@@ -18,6 +18,7 @@ import { syncAndLoad } from "./lib/opfs";
 import type { SyncStatus } from "./lib/opfs";
 import KpiBar from "./components/KpiBar";
 import WatchlistTable from "./components/WatchlistTable";
+import VesselDetail from "./components/VesselDetail";
 import VesselMap from "./components/VesselMap";
 import SyncStatusBar from "./components/SyncStatus";
 
@@ -163,6 +164,12 @@ export default function App() {
             selectedMmsi={selectedMmsi}
             onSelect={setSelectedMmsi}
           />
+          {selectedMmsi && (() => {
+            const v = vessels.find((v) => v.mmsi === selectedMmsi);
+            return v ? (
+              <VesselDetail vessel={v} onClose={() => setSelectedMmsi(null)} />
+            ) : null;
+          })()}
         </div>
 
         {/* Map */}

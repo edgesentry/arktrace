@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import type { VesselRow } from "../lib/duckdb";
-
-// MapLibre GL JS is loaded via CDN in index.html so it is available as a global.
-declare const maplibregl: typeof import("maplibre-gl");
 
 interface Props {
   vessels: VesselRow[];
@@ -182,6 +181,12 @@ export default function VesselMap({ vessels, selectedMmsi, onSelect }: Props) {
       ?.setLngLat([vessel.last_lon, vessel.last_lat])
       .setHTML(html)
       .addTo(map);
+
+    map.flyTo({
+      center: [vessel.last_lon, vessel.last_lat],
+      zoom: Math.max(map.getZoom(), 6),
+      speed: 1.4,
+    });
   }, [selectedMmsi, vessels]);
 
   return (
