@@ -1,3 +1,5 @@
 node_modules/
 dist/
 .vite/
+# Override root .gitignore which ignores lib/ (Python build artifact rule)
+!src/lib/
