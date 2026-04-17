@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-04-17T00:00:00Z",
+  "base_url": "/fixtures",
+  "files": [
+    {
+      "key": "fixtures/watchlist.parquet",
+      "url": "/fixtures/watchlist.parquet",
+      "size_bytes": 7836,
+      "table": "watchlist",
+      "register_as": "watchlist.parquet"
+    },
+    {
+      "key": "fixtures/validation_metrics.parquet",
+      "url": "/fixtures/validation_metrics.parquet",
+      "size_bytes": 1646,
+      "table": "validation_metrics",
+      "register_as": "validation_metrics.parquet"
+    }
+  ]
+}
