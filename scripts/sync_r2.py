@@ -1220,7 +1220,7 @@ def cmd_push_ducklake_public(args: argparse.Namespace) -> int:
         total_bytes = 0
         for p in parquets:
             rel = p.relative_to(catalog_dir)
-            r2_path = f"{bucket}/{_DUCKLAKE_DATA_PREFIX}{rel}"
+            r2_path = f"{bucket}/{rel}"
             sz = p.stat().st_size
             total_bytes += sz
             print(f"  {rel}  ({sz / 1024:.1f} KB) → {r2_path} ...")
