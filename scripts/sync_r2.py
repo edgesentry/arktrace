@@ -1227,9 +1227,21 @@ def cmd_push_ducklake_public(args: argparse.Namespace) -> int:
             _upload_file(fs, p, r2_path)
         print(f"Uploaded {len(parquets)} Parquet file(s) ({total_bytes / 1_048_576:.2f} MB)  ✓")
 
+    # Upload ducklake_manifest.json — consumed by the browser OPFS sync (Phase 2)
+    manifest_file = catalog_dir / "ducklake_manifest.json"
+    if manifest_file.exists():
+        manifest_r2 = f"{bucket}/ducklake_manifest.json"
+        sz = manifest_file.stat().st_size
+        print(f"Uploading ducklake_manifest.json ({sz} B) → {manifest_r2} ...")
+        _upload_file(fs, manifest_file, manifest_r2)
+        print("  ✓")
+    else:
+        print("[warn] ducklake_manifest.json not found — browser OPFS sync will not work.")
+
     print(
         f"\nDone. Public DuckLake catalog available at:\n"
         f"  {_PUBLIC_BASE_URL}/{_DUCKLAKE_CATALOG_KEY}\n"
+        f"  {_PUBLIC_BASE_URL}/ducklake_manifest.json  ← browser OPFS sync manifest\n"
         f"  {_PUBLIC_BASE_URL}/{_DUCKLAKE_DATA_PREFIX}..."
     )
     return 0

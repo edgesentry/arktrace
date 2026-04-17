@@ -368,6 +368,50 @@ def run(
     print()
 
     # ------------------------------------------------------------------
+    # Write ducklake_manifest.json — consumed by the browser OPFS sync
+    # ------------------------------------------------------------------
+    # Maps each Parquet file to:
+    #   - its R2 URL (so the browser can fetch it)
+    #   - a stable `register_as` name (e.g. "watchlist.parquet") that
+    #     DuckDB-WASM uses as the file key in read_parquet() queries
+    _TABLE_REGISTER: dict[str, str] = {
+        "watchlist": "watchlist.parquet",
+        "causal_effects": "causal_effects.parquet",
+        "composite_scores": "composite_scores.parquet",
+        "validation_metrics": "validation_metrics.parquet",
+    }
+    _PUBLIC_BASE_URL = "https://arktrace-public.edgesentry.io"
+
+    manifest_files = []
+    for p in parquets:
+        rel = p.relative_to(dat.parent)  # e.g. data/main/watchlist/ducklake-*.parquet
+        # Derive table name from path: data/main/<table>/ducklake-*.parquet
+        parts = rel.parts
+        table_name = parts[2] if len(parts) >= 3 else p.stem
+        register_as = _TABLE_REGISTER.get(table_name, f"{table_name}.parquet")
+        manifest_files.append(
+            {
+                "key": str(rel).replace("\\", "/"),
+                "url": f"{_PUBLIC_BASE_URL}/{str(rel).replace(chr(92), '/')}",
+                "size_bytes": p.stat().st_size,
+                "table": table_name,
+                "register_as": register_as,
+            }
+        )
+
+    from datetime import UTC, datetime
+
+    manifest = {
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "base_url": _PUBLIC_BASE_URL,
+        "files": manifest_files,
+    }
+    manifest_path = cat.parent / "ducklake_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+    print(f"Manifest written: {manifest_path}  ({len(manifest_files)} file entries)")
+    print()
+
+    # ------------------------------------------------------------------
     # Optional R2 push
     # ------------------------------------------------------------------
     sync_py = str(_REPO_ROOT / "scripts" / "sync_r2.py")
