@@ -44,7 +44,7 @@ export type SyncStatus =
   | { phase: "fetching_manifest" }
   | { phase: "syncing"; done: number; total: number; current: string }
   | { phase: "loading" }
-  | { phase: "ready"; filesLoaded: number; fromCache: boolean }
+  | { phase: "ready"; filesLoaded: number; fromCache: boolean; fromFixtures?: boolean }
   | { phase: "error"; message: string };
 
 // ---------------------------------------------------------------------------
@@ -120,18 +120,23 @@ export async function syncAndLoad(
   try {
     manifest = await fetchManifest();
   } catch {
-    // No network — try loading from OPFS cache
+    // No network — try OPFS cache first, then bundled fixtures
     onStatus({ phase: "loading" });
-    const loaded = await loadFromOpfs(db);
-    if (loaded === 0) {
-      onStatus({
-        phase: "error",
-        message: "No network and no cached data in OPFS. Connect to sync.",
-      });
-      return 0;
+    const fromOpfs = await loadFromOpfs(db);
+    if (fromOpfs > 0) {
+      onStatus({ phase: "ready", filesLoaded: fromOpfs, fromCache: true });
+      return fromOpfs;
     }
-    onStatus({ phase: "ready", filesLoaded: loaded, fromCache: true });
-    return loaded;
+    const fromFixtures = await loadFromFixtures(db);
+    if (fromFixtures > 0) {
+      onStatus({ phase: "ready", filesLoaded: fromFixtures, fromCache: true, fromFixtures: true });
+      return fromFixtures;
+    }
+    onStatus({
+      phase: "error",
+      message: "No network and no cached data in OPFS. Connect to sync.",
+    });
+    return 0;
   }
 
   // ── 2. Download missing / stale files ───────────────────────────────────
@@ -172,6 +177,32 @@ export async function syncAndLoad(
   }
 
   onStatus({ phase: "ready", filesLoaded: loaded, fromCache: done === 0 });
+  return loaded;
+}
+
+/**
+ * Load bundled fixture Parquet files from /fixtures/ (served as static assets).
+ * Last-resort fallback: no network + empty OPFS → still show demo data.
+ */
+async function loadFromFixtures(db: AsyncDuckDB): Promise<number> {
+  const names = [
+    "watchlist.parquet",
+    "validation_metrics.parquet",
+    "causal_effects.parquet",
+    "score_history.parquet",
+  ];
+  let loaded = 0;
+  for (const name of names) {
+    try {
+      const resp = await fetch(`/fixtures/${name}`);
+      if (!resp.ok) continue;
+      const buf = await resp.arrayBuffer();
+      await registerParquet(db, name, buf);
+      loaded++;
+    } catch {
+      // fixture file absent — skip
+    }
+  }
   return loaded;
 }
 
