@@ -4,6 +4,12 @@ import type { VesselRow } from "../lib/duckdb";
 import { queryCausalEffect } from "../lib/duckdb";
 import type { CausalEffectRow } from "../lib/duckdb";
 import {
+  loadChatHistory,
+  appendChatMessage,
+  clearChatHistory,
+} from "../lib/chat";
+import type { ChatMessage } from "../lib/chat";
+import {
   formatLastSeen,
   confidenceTier,
   confidenceTierColor,
@@ -186,6 +192,11 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
   const [briefStatus, setBriefStatus] = useState<BriefStatus>("idle");
   const [causal, setCausal] = useState<CausalEffectRow | null | undefined>(undefined);
   const [shadowTooltip, setShadowTooltip] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -230,6 +241,69 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
     setCausal(undefined);
     queryCausalEffect(conn, vessel.mmsi).then(setCausal).catch(() => setCausal(null));
   }, [conn, vessel.mmsi]);
+
+  // Load chat history on vessel change
+  useEffect(() => {
+    if (!conn) return;
+    setChatMessages([]);
+    setChatInput("");
+    loadChatHistory(conn, vessel.mmsi).then(setChatMessages).catch(() => {});
+  }, [conn, vessel.mmsi]);
+
+  // Scroll chat to bottom when messages change
+  useEffect(() => {
+    if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, chatOpen]);
+
+  async function handleChatSend() {
+    if (!chatInput.trim() || chatLoading || !conn) return;
+    const userContent = chatInput.trim();
+    setChatInput("");
+    setChatLoading(true);
+
+    // Persist and show user message
+    await appendChatMessage(conn, vessel.mmsi, "user", userContent);
+    const updated = await loadChatHistory(conn, vessel.mmsi);
+    setChatMessages(updated);
+
+    // Build messages array: system prompt + history + new user message
+    const messages = [
+      { role: "system", content: buildPrompt(vessel) },
+      ...updated.map((m) => ({ role: m.role, content: m.content })),
+    ];
+
+    try {
+      const ac = new AbortController();
+      const timeout = setTimeout(() => ac.abort(), LLM_TIMEOUT_MS);
+      const res = await fetch(LLM_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "local", max_tokens: 300, temperature: 0.3, messages }),
+        signal: ac.signal,
+      });
+      clearTimeout(timeout);
+      const data = await res.json();
+      const assistantContent: string = (data?.choices?.[0]?.message?.content ?? "").trim();
+      if (assistantContent) {
+        await appendChatMessage(conn, vessel.mmsi, "assistant", assistantContent);
+        const final = await loadChatHistory(conn, vessel.mmsi);
+        setChatMessages(final);
+      }
+    } catch {
+      // LLM offline — show inline error message
+      await appendChatMessage(conn, vessel.mmsi, "assistant", "⚠ LLM offline — start llama-server on :8080");
+      const final = await loadChatHistory(conn, vessel.mmsi);
+      setChatMessages(final);
+    } finally {
+      setChatLoading(false);
+    }
+  }
+
+  async function handleClearChat() {
+    if (!conn) return;
+    await clearChatHistory(conn, vessel.mmsi);
+    setChatMessages([]);
+  }
 
   return (
     <div
@@ -526,6 +600,108 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
             }}
           >
             {brief}
+          </div>
+        )}
+      </div>
+
+      {/* ── Chat panel ────────────────────────────────────────────────── */}
+      <div style={{ marginTop: "0.75rem" }}>
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          cursor: "pointer",
+          userSelect: "none",
+          marginBottom: chatOpen ? "0.4rem" : 0,
+        }}
+          onClick={() => setChatOpen((o) => !o)}
+        >
+          <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#4a5568" }}>
+            Follow-up chat {chatMessages.length > 0 && <span style={{ color: "#93c5fd" }}>({chatMessages.length})</span>}
+          </div>
+          <span style={{ fontSize: "0.6rem", color: "#4a5568" }}>{chatOpen ? "▲" : "▼"}</span>
+        </div>
+
+        {chatOpen && (
+          <div style={{ border: "1px solid #2d3748", borderRadius: 4, background: "#0f1117", overflow: "hidden" }}>
+            {/* Message list */}
+            <div style={{ maxHeight: "12rem", overflowY: "auto", padding: "0.5rem 0.6rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+              {chatMessages.length === 0 && (
+                <div style={{ fontSize: "0.68rem", color: "#4a5568", fontStyle: "italic", textAlign: "center", padding: "0.5rem" }}>
+                  Ask a follow-up question about this vessel…
+                </div>
+              )}
+              {chatMessages.map((m) => (
+                <div key={m.id} style={{
+                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                  maxWidth: "85%",
+                  padding: "0.3rem 0.5rem",
+                  borderRadius: 4,
+                  background: m.role === "user" ? "#1a3a5c" : "#1a1f2e",
+                  border: `1px solid ${m.role === "user" ? "#2b5a8a" : "#2d3748"}`,
+                  fontSize: "0.72rem",
+                  color: m.role === "user" ? "#93c5fd" : "#cbd5e0",
+                  lineHeight: 1.5,
+                  wordBreak: "break-word",
+                }}>
+                  {m.content}
+                </div>
+              ))}
+              {chatLoading && (
+                <div style={{ alignSelf: "flex-start", fontSize: "0.68rem", color: "#4a5568", fontStyle: "italic", padding: "0.2rem 0.5rem" }}>
+                  Thinking…
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input row */}
+            <div style={{ display: "flex", gap: "0.3rem", padding: "0.4rem 0.5rem", borderTop: "1px solid #2d3748" }}>
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleChatSend(); } }}
+                placeholder="Ask a follow-up…"
+                disabled={chatLoading}
+                style={{
+                  flex: 1,
+                  background: "#0f1117",
+                  border: "1px solid #2d3748",
+                  borderRadius: 3,
+                  color: "#e2e8f0",
+                  fontSize: "0.72rem",
+                  padding: "0.25rem 0.4rem",
+                  outline: "none",
+                  fontFamily: "inherit",
+                }}
+              />
+              <button
+                onClick={handleChatSend}
+                disabled={chatLoading || !chatInput.trim()}
+                style={{
+                  background: chatLoading || !chatInput.trim() ? "#1a1f2e" : "#2b4a8a",
+                  border: "1px solid #2d3748",
+                  borderRadius: 3,
+                  color: chatLoading || !chatInput.trim() ? "#4a5568" : "#93c5fd",
+                  cursor: chatLoading || !chatInput.trim() ? "not-allowed" : "pointer",
+                  fontSize: "0.68rem",
+                  fontWeight: 600,
+                  padding: "0.25rem 0.5rem",
+                  flexShrink: 0,
+                }}
+              >
+                Send
+              </button>
+              {chatMessages.length > 0 && (
+                <button
+                  onClick={handleClearChat}
+                  title="Clear history for this vessel"
+                  style={{ background: "none", border: "1px solid #2d3748", borderRadius: 3, color: "#4a5568", cursor: "pointer", fontSize: "0.65rem", padding: "0.25rem 0.4rem", flexShrink: 0 }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
