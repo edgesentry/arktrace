@@ -29,7 +29,7 @@
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/yoheionishi/work/edgesentry/arktrace</string>
+  <string>/Users/yoheionishi/work/edgesentry/arktrace/pipeline</string>
 
   <key>EnvironmentVariables</key>
   <dict>
