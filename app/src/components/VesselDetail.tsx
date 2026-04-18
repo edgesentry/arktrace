@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import type { VesselRow } from "../lib/duckdb";
+import { queryCausalEffect } from "../lib/duckdb";
+import type { CausalEffectRow } from "../lib/duckdb";
 import {
   formatLastSeen,
   confidenceTier,
@@ -170,11 +172,20 @@ const row = (label: string, value: string | number | null | undefined) => (
   </tr>
 );
 
+function shadowSignalColor(att: number, significant: boolean): string {
+  if (!significant) return "#4a5568";
+  if (att >= 0.4) return "#fc8181";
+  if (att >= 0.2) return "#f6ad55";
+  return "#68d391";
+}
+
 export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: Props) {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [brief, setBrief] = useState<string>("");
   const [briefStatus, setBriefStatus] = useState<BriefStatus>("idle");
+  const [causal, setCausal] = useState<CausalEffectRow | null | undefined>(undefined);
+  const [shadowTooltip, setShadowTooltip] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -212,6 +223,13 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
       clearTimeout(timeout);
     };
   }, [vessel.mmsi]);
+
+  // Fetch causal ATT on vessel change
+  useEffect(() => {
+    if (!conn) return;
+    setCausal(undefined);
+    queryCausalEffect(conn, vessel.mmsi).then(setCausal).catch(() => setCausal(null));
+  }, [conn, vessel.mmsi]);
 
   return (
     <div
@@ -318,6 +336,94 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
           {vessel.confidence.toFixed(3)} — {confidenceTier(vessel.confidence)}
         </span>
       </div>
+
+      {/* Shadow Signal badge */}
+      {causal !== undefined && (
+        <div style={{ marginBottom: "0.75rem", position: "relative" }}>
+          <button
+            onMouseEnter={() => setShadowTooltip(true)}
+            onMouseLeave={() => setShadowTooltip(false)}
+            onFocus={() => setShadowTooltip(true)}
+            onBlur={() => setShadowTooltip(false)}
+            aria-label="Shadow Signal causal ATT score"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              padding: "0.2rem 0.6rem",
+              borderRadius: 4,
+              background: "none",
+              border: `1px solid ${causal ? shadowSignalColor(causal.att_estimate, causal.is_significant) : "#2d3748"}`,
+              color: causal ? shadowSignalColor(causal.att_estimate, causal.is_significant) : "#4a5568",
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              fontFamily: "ui-monospace, monospace",
+              cursor: "default",
+            }}
+          >
+            <span style={{ fontSize: "0.6rem", opacity: 0.7 }}>Shadow Signal</span>
+            <span>
+              {causal ? `ATT ${causal.att_estimate >= 0 ? "+" : ""}${causal.att_estimate.toFixed(3)}` : "—"}
+            </span>
+            {causal?.is_significant && (
+              <span style={{ fontSize: "0.55rem", fontWeight: 700, opacity: 0.8 }}>★</span>
+            )}
+          </button>
+
+          {/* Tooltip */}
+          {shadowTooltip && (
+            <div style={{
+              position: "absolute",
+              top: "calc(100% + 6px)",
+              left: 0,
+              zIndex: 50,
+              background: "#1a1f2e",
+              border: "1px solid #2d3748",
+              borderRadius: 6,
+              padding: "0.6rem 0.75rem",
+              width: 260,
+              fontSize: "0.68rem",
+              lineHeight: 1.55,
+              color: "#a0aec0",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+            }}>
+              <div style={{ fontWeight: 700, color: "#e2e8f0", marginBottom: "0.35rem" }}>
+                Causal Shadow Signal
+              </div>
+              <div style={{ marginBottom: "0.4rem" }}>
+                Measures whether this vessel's behaviour changed significantly around a sanction
+                announcement date — a causal indicator of evasion, not mere correlation.
+              </div>
+              {causal ? (
+                <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem", marginBottom: "0.4rem" }}>
+                    <div><span style={{ color: "#718096" }}>Regime: </span>{causal.regime}</div>
+                    <div><span style={{ color: "#718096" }}>ATT: </span>
+                      <span style={{ color: shadowSignalColor(causal.att_estimate, causal.is_significant) }}>
+                        {causal.att_estimate >= 0 ? "+" : ""}{causal.att_estimate.toFixed(3)}
+                      </span>
+                      <span style={{ color: "#4a5568" }}> [{causal.att_ci_lower.toFixed(3)}, {causal.att_ci_upper.toFixed(3)}]</span>
+                    </div>
+                    <div><span style={{ color: "#718096" }}>p-value: </span>
+                      <span style={{ color: causal.p_value < 0.05 ? "#68d391" : "#f6ad55" }}>
+                        {causal.p_value.toFixed(4)}
+                      </span>
+                      {causal.is_significant
+                        ? <span style={{ color: "#68d391" }}> ★ significant</span>
+                        : <span style={{ color: "#4a5568" }}> not significant</span>}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ color: "#4a5568" }}>No causal record for this vessel.</div>
+              )}
+              <div style={{ borderTop: "1px solid #2d3748", paddingTop: "0.35rem", color: "#4a5568", fontSize: "0.62rem" }}>
+                DiD model · docs/causal-analysis.md
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Details table */}
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
