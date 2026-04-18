@@ -81,7 +81,11 @@ export default function SyncStatusBar({ status, onSync }: Props) {
     return (
       <div style={{ ...base, color: "#48bb78" }}>
         ✓ {status.filesLoaded} file{status.filesLoaded !== 1 ? "s" : ""} loaded
-        {status.fromCache ? " (from OPFS cache)" : " (synced from R2)"}
+        {status.fromFixtures
+          ? " (demo fixtures — sync for live data)"
+          : status.fromCache
+          ? " (from OPFS cache)"
+          : " (synced from R2)"}
         <button
           onClick={onSync}
           style={{
