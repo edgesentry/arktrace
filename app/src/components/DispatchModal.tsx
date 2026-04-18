@@ -1,6 +1,14 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { VesselRow } from "../lib/duckdb";
+import {
+  formatLastSeen,
+  confidenceTier,
+  confidenceTierColor,
+  signalLabel,
+  signalSeverity,
+  severityColor,
+} from "../lib/humanise";
 
 interface ShapSignal {
   feature: string;
@@ -16,12 +24,6 @@ function parseSignals(raw: string | null | undefined): ShapSignal[] {
   } catch {
     return [];
   }
-}
-
-function confidenceColor(c: number): string {
-  if (c >= 0.75) return "#fc8181";
-  if (c >= 0.5) return "#f6ad55";
-  return "#68d391";
 }
 
 interface Props {
@@ -83,11 +85,18 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
       flag: vessel.flag || null,
       vessel_type: vessel.vessel_type || null,
       confidence: vessel.confidence,
+      confidence_tier: confidenceTier(vessel.confidence),
       region: vessel.region || null,
       last_lat: vessel.last_lat ?? null,
       last_lon: vessel.last_lon ?? null,
       last_seen: vessel.last_seen ?? null,
-      top_signals: signals,
+      top_signals: signals.map((s) => ({
+        feature: s.feature,
+        label: signalLabel(s.feature),
+        value: s.value,
+        severity: signalSeverity(s.feature, s.value),
+        contribution: s.contribution,
+      })),
       analyst_brief: brief || null,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -102,7 +111,10 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
   // ── Copy to clipboard ─────────────────────────────────────────────────────
   function handleCopy() {
     const signalLines = signals
-      .map((s) => `- **${s.feature.replace(/_/g, " ")}**: ${s.value ?? "—"} (${(s.contribution * 100).toFixed(0)}%)`)
+      .map((s) => {
+        const sev = signalSeverity(s.feature, s.value);
+        return `- **${signalLabel(s.feature)}**: ${s.value ?? "—"}${sev ? ` [${sev}]` : ""} (${(s.contribution * 100).toFixed(0)}%)`;
+      })
       .join("\n");
 
     const md = [
@@ -113,11 +125,11 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
       `**Flag:** ${vessel.flag || "—"}`,
       `**Type:** ${vessel.vessel_type || "—"}`,
       `**Region:** ${vessel.region || "—"}`,
-      `**Last seen:** ${vessel.last_seen || "—"}`,
+      `**Last seen:** ${formatLastSeen(vessel.last_seen)}`,
       vessel.last_lat != null && vessel.last_lon != null
         ? `**Position:** ${vessel.last_lat.toFixed(4)}°, ${vessel.last_lon.toFixed(4)}°`
         : null,
-      `**Anomaly confidence:** ${vessel.confidence.toFixed(3)}`,
+      `**Anomaly confidence:** ${vessel.confidence.toFixed(3)} — ${confidenceTier(vessel.confidence)}`,
       "",
       signals.length ? `## Top signals\n${signalLines}` : null,
       "",
@@ -132,17 +144,15 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
     navigator.clipboard.writeText(md).catch(() => {/* ignore */});
   }
 
+  const color = confidenceTierColor(vessel.confidence);
+  const tier = confidenceTier(vessel.confidence);
+
   return createPortal(
     <>
       {/* Backdrop */}
       <div
         onClick={onClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.6)",
-          zIndex: 100,
-        }}
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100 }}
       />
 
       {/* Modal */}
@@ -168,38 +178,18 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
         }}
       >
         {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0.75rem 1rem",
-            borderBottom: "1px solid #2d3748",
-            flexShrink: 0,
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", borderBottom: "1px solid #2d3748", flexShrink: 0 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "#93c5fd" }}>
               Dispatch Brief
             </div>
             <div style={{ fontSize: "0.68rem", color: "#4a5568", marginTop: 2 }}>
               {vessel.vessel_name || vessel.mmsi} · MMSI {vessel.mmsi}
+              {vessel.imo && <span style={{ marginLeft: "0.5rem" }}>· IMO {vessel.imo}</span>}
             </div>
           </div>
-          <button
-            ref={closeRef}
-            onClick={onClose}
-            aria-label="Close dispatch modal"
-            style={{
-              background: "none",
-              border: "none",
-              color: "#4a5568",
-              cursor: "pointer",
-              fontSize: "1.1rem",
-              lineHeight: 1,
-              padding: "0.2rem 0.3rem",
-            }}
-          >
+          <button ref={closeRef} onClick={onClose} aria-label="Close dispatch modal"
+            style={{ background: "none", border: "none", color: "#4a5568", cursor: "pointer", fontSize: "1.1rem", lineHeight: 1, padding: "0.2rem 0.3rem" }}>
             ✕
           </button>
         </div>
@@ -209,19 +199,17 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
 
           {/* Confidence */}
           <div style={{ marginBottom: "0.75rem" }}>
-            <span
-              style={{
-                display: "inline-block",
-                padding: "0.2rem 0.6rem",
-                borderRadius: 4,
-                background: "#1a1f2e",
-                border: `1px solid ${confidenceColor(vessel.confidence)}`,
-                color: confidenceColor(vessel.confidence),
-                fontSize: "0.78rem",
-                fontWeight: 700,
-              }}
-            >
-              confidence {vessel.confidence.toFixed(3)}
+            <span style={{
+              display: "inline-block",
+              padding: "0.2rem 0.6rem",
+              borderRadius: 4,
+              background: "#1a1f2e",
+              border: `1px solid ${color}`,
+              color,
+              fontSize: "0.78rem",
+              fontWeight: 700,
+            }}>
+              {vessel.confidence.toFixed(3)} — {tier}
             </span>
           </div>
 
@@ -229,14 +217,14 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
           <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: "0.75rem" }}>
             <tbody>
               {[
+                vessel.imo ? ["IMO", vessel.imo] : null,
                 ["Flag", vessel.flag],
                 ["Type", vessel.vessel_type],
                 ["Region", vessel.region],
-                ["Last seen", vessel.last_seen],
+                ["Last seen", formatLastSeen(vessel.last_seen)],
                 vessel.last_lat != null && vessel.last_lon != null
                   ? ["Position", `${vessel.last_lat.toFixed(4)}°, ${vessel.last_lon.toFixed(4)}°`]
                   : null,
-                vessel.imo ? ["IMO", vessel.imo] : null,
               ]
                 .filter((r): r is [string, string] => r !== null)
                 .map(([label, val]) => (
@@ -255,26 +243,36 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
           {/* Top signals */}
           {signals.length > 0 && (
             <div style={{ marginBottom: "0.75rem" }}>
-              <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#4a5568", marginBottom: "0.4rem" }}>
+              <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#4a5568", marginBottom: "0.5rem" }}>
                 Top signals
               </div>
               {signals.map((s) => {
                 const pct = (s.contribution / maxContrib) * 100;
-                const label = s.feature.replace(/_/g, " ");
+                const label = signalLabel(s.feature);
+                const sev = signalSeverity(s.feature, s.value);
+                const barColor = sev ? severityColor(sev) : "#fc8181";
+                const rawVal = s.value != null ? String(s.value) : "—";
                 return (
-                  <div key={s.feature} title={`${s.feature}: ${s.value ?? "—"}`} style={{ marginBottom: "0.3rem" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <span style={{ fontSize: "0.65rem", color: "#a0aec0", width: 160, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div key={s.feature} title={`${s.feature}: ${rawVal}`} style={{ marginBottom: "0.4rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", marginBottom: "0.15rem" }}>
+                      <span style={{ fontSize: "0.68rem", color: "#a0aec0", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {label}
                       </span>
-                      <div style={{ flex: 1, background: "#1a1f2e", borderRadius: 2, height: 6, minWidth: 0 }}>
-                        <div style={{ width: `${pct}%`, background: "#fc8181", height: "100%", borderRadius: 2 }} />
-                      </div>
-                      <span style={{ fontSize: "0.65rem", color: "#718096", minWidth: 28, textAlign: "right" }}>
-                        {(s.contribution * 100).toFixed(0)}%
+                      {sev && (
+                        <span style={{ fontSize: "0.55rem", fontWeight: 700, color: severityColor(sev), border: `1px solid ${severityColor(sev)}`, borderRadius: 2, padding: "0 0.25rem", flexShrink: 0 }}>
+                          {sev}
+                        </span>
+                      )}
+                      <span style={{ fontSize: "0.65rem", color: "#718096", flexShrink: 0 }}>
+                        {rawVal}
                       </span>
-                      <span style={{ fontSize: "0.65rem", color: "#4a5568", minWidth: 32, textAlign: "right" }}>
-                        {s.value ?? "—"}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <div style={{ flex: 1, background: "#1a1f2e", borderRadius: 2, height: 5, minWidth: 0 }}>
+                        <div style={{ width: `${pct}%`, background: barColor, height: "100%", borderRadius: 2 }} />
+                      </div>
+                      <span style={{ fontSize: "0.6rem", color: "#4a5568", minWidth: 24, textAlign: "right" }}>
+                        {(s.contribution * 100).toFixed(0)}%
                       </span>
                     </div>
                   </div>
@@ -289,18 +287,7 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
               <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#4a5568", marginBottom: "0.35rem" }}>
                 Analyst brief
               </div>
-              <div
-                style={{
-                  fontSize: "0.75rem",
-                  color: "#cbd5e0",
-                  lineHeight: 1.6,
-                  padding: "0.5rem 0.7rem",
-                  background: "#1a1f2e",
-                  borderRadius: 4,
-                  border: "1px solid #2d3748",
-                  borderLeft: "3px solid #93c5fd",
-                }}
-              >
+              <div style={{ fontSize: "0.75rem", color: "#cbd5e0", lineHeight: 1.6, padding: "0.5rem 0.7rem", background: "#1a1f2e", borderRadius: 4, border: "1px solid #2d3748", borderLeft: "3px solid #93c5fd" }}>
                 {brief}
               </div>
             </div>
@@ -308,44 +295,11 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
         </div>
 
         {/* Footer actions — hidden in print */}
-        <div
-          id="dispatch-print-footer"
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            padding: "0.65rem 1rem",
-            borderTop: "1px solid #2d3748",
-            flexShrink: 0,
-          }}
-        >
-          <button
-            onClick={handleExport}
-            style={{
-              background: "#1a3a5c",
-              border: "1px solid #2b5a8a",
-              borderRadius: 4,
-              color: "#93c5fd",
-              cursor: "pointer",
-              fontSize: "0.72rem",
-              fontWeight: 600,
-              padding: "0.3rem 0.75rem",
-            }}
-          >
+        <div id="dispatch-print-footer" style={{ display: "flex", gap: "0.5rem", padding: "0.65rem 1rem", borderTop: "1px solid #2d3748", flexShrink: 0 }}>
+          <button onClick={handleExport} style={{ background: "#1a3a5c", border: "1px solid #2b5a8a", borderRadius: 4, color: "#93c5fd", cursor: "pointer", fontSize: "0.72rem", fontWeight: 600, padding: "0.3rem 0.75rem" }}>
             Export JSON
           </button>
-          <button
-            onClick={handleCopy}
-            style={{
-              background: "none",
-              border: "1px solid #2d3748",
-              borderRadius: 4,
-              color: "#718096",
-              cursor: "pointer",
-              fontSize: "0.72rem",
-              fontWeight: 600,
-              padding: "0.3rem 0.75rem",
-            }}
-          >
+          <button onClick={handleCopy} style={{ background: "none", border: "1px solid #2d3748", borderRadius: 4, color: "#718096", cursor: "pointer", fontSize: "0.72rem", fontWeight: 600, padding: "0.3rem 0.75rem" }}>
             Copy brief
           </button>
           <button
@@ -355,32 +309,11 @@ export default function DispatchModal({ vessel, brief, onClose }: Props) {
               window.print();
               document.title = prev;
             }}
-            style={{
-              background: "none",
-              border: "1px solid #2d3748",
-              borderRadius: 4,
-              color: "#718096",
-              cursor: "pointer",
-              fontSize: "0.72rem",
-              fontWeight: 600,
-              padding: "0.3rem 0.75rem",
-            }}
+            style={{ background: "none", border: "1px solid #2d3748", borderRadius: 4, color: "#718096", cursor: "pointer", fontSize: "0.72rem", fontWeight: 600, padding: "0.3rem 0.75rem" }}
           >
             Print
           </button>
-          <button
-            onClick={onClose}
-            style={{
-              marginLeft: "auto",
-              background: "none",
-              border: "1px solid #2d3748",
-              borderRadius: 4,
-              color: "#4a5568",
-              cursor: "pointer",
-              fontSize: "0.72rem",
-              padding: "0.3rem 0.75rem",
-            }}
-          >
+          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "1px solid #2d3748", borderRadius: 4, color: "#4a5568", cursor: "pointer", fontSize: "0.72rem", padding: "0.3rem 0.75rem" }}>
             Close
           </button>
         </div>

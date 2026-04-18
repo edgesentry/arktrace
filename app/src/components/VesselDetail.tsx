@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import type { VesselRow } from "../lib/duckdb";
+import {
+  formatLastSeen,
+  confidenceTier,
+  confidenceTierColor,
+  signalLabel,
+  signalSeverity,
+  severityColor,
+} from "../lib/humanise";
 import ReviewPanel from "./ReviewPanel";
 import DispatchModal from "./DispatchModal";
 
@@ -98,55 +106,33 @@ function ShapBarChart({ raw }: { raw: string | null | undefined }) {
       </div>
       {signals.map((s) => {
         const pct = maxContrib > 0 ? (s.contribution / maxContrib) * 100 : 0;
-        const label = s.feature.replace(/_/g, " ");
+        const label = signalLabel(s.feature);
         const rawVal = s.value != null ? String(s.value) : "—";
+        const sev = signalSeverity(s.feature, s.value);
         return (
           <div
             key={s.feature}
             title={`${s.feature}: ${rawVal}`}
-            style={{ marginBottom: "0.3rem" }}
+            style={{ marginBottom: "0.35rem" }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <span
-                style={{
-                  fontSize: "0.65rem",
-                  color: "#a0aec0",
-                  width: 130,
-                  flexShrink: 0,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", marginBottom: "0.15rem" }}>
+              <span style={{ fontSize: "0.65rem", color: "#a0aec0", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {label}
               </span>
-              <div
-                style={{
-                  flex: 1,
-                  background: "#1a1f2e",
-                  borderRadius: 2,
-                  height: 6,
-                  minWidth: 0,
-                }}
-              >
-                <div
-                  style={{
-                    width: `${pct}%`,
-                    background: "#fc8181",
-                    height: "100%",
-                    borderRadius: 2,
-                  }}
-                />
+              {sev && (
+                <span style={{ fontSize: "0.55rem", fontWeight: 700, color: severityColor(sev), border: `1px solid ${severityColor(sev)}`, borderRadius: 2, padding: "0 0.25rem", flexShrink: 0, fontFamily: "ui-monospace,monospace" }}>
+                  {sev}
+                </span>
+              )}
+              <span style={{ fontSize: "0.65rem", color: "#718096", flexShrink: 0, fontFamily: "ui-monospace,monospace" }}>
+                {rawVal}
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <div style={{ flex: 1, background: "#1a1f2e", borderRadius: 2, height: 5, minWidth: 0 }}>
+                <div style={{ width: `${pct}%`, background: sev ? severityColor(sev) : "#fc8181", height: "100%", borderRadius: 2 }} />
               </div>
-              <span
-                style={{
-                  fontSize: "0.65rem",
-                  color: "#718096",
-                  minWidth: 28,
-                  textAlign: "right",
-                  fontFamily: "ui-monospace,monospace",
-                }}
-              >
+              <span style={{ fontSize: "0.6rem", color: "#4a5568", minWidth: 24, textAlign: "right", fontFamily: "ui-monospace,monospace" }}>
                 {(s.contribution * 100).toFixed(0)}%
               </span>
             </div>
@@ -183,12 +169,6 @@ const row = (label: string, value: string | number | null | undefined) => (
     </td>
   </tr>
 );
-
-function confidenceColor(c: number): string {
-  if (c >= 0.75) return "#fc8181";
-  if (c >= 0.5) return "#f6ad55";
-  return "#68d391";
-}
 
 export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: Props) {
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -328,24 +308,25 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
             padding: "0.2rem 0.6rem",
             borderRadius: 4,
             background: "#1a1f2e",
-            border: `1px solid ${confidenceColor(vessel.confidence)}`,
-            color: confidenceColor(vessel.confidence),
+            border: `1px solid ${confidenceTierColor(vessel.confidence)}`,
+            color: confidenceTierColor(vessel.confidence),
             fontSize: "0.78rem",
-            fontWeight: 600,
+            fontWeight: 700,
             fontFamily: "ui-monospace, monospace",
           }}
         >
-          confidence {vessel.confidence.toFixed(3)}
+          {vessel.confidence.toFixed(3)} — {confidenceTier(vessel.confidence)}
         </span>
       </div>
 
       {/* Details table */}
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <tbody>
+          {vessel.imo && row("IMO", vessel.imo)}
           {row("Flag", vessel.flag)}
           {row("Type", vessel.vessel_type)}
           {row("Region", vessel.region)}
-          {row("Last seen", vessel.last_seen)}
+          {row("Last seen", formatLastSeen(vessel.last_seen))}
           {vessel.last_lat != null &&
             vessel.last_lon != null &&
             row(
