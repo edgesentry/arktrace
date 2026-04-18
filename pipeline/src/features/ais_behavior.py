@@ -118,7 +118,7 @@ def compute_position_jumps(df: pl.DataFrame) -> pl.DataFrame:
     with_delta = sorted_df.with_columns(
         (
             (pl.col("timestamp").cast(pl.Int64) - pl.col("prev_ts").cast(pl.Int64))
-            / 1_000_000_000
+            / 1_000_000  # µs → seconds (Polars Datetime casts to µs since epoch)
             / 3600.0
         ).alias("delta_h")
     ).filter((pl.col("delta_h") > 0) & (pl.col("delta_h") <= 1.0))

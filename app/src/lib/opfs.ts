@@ -119,7 +119,7 @@ export async function syncAndLoad(
   let manifest: Manifest;
   try {
     manifest = await fetchManifest();
-  } catch (err) {
+  } catch {
     // No network — try loading from OPFS cache
     onStatus({ phase: "loading" });
     const loaded = await loadFromOpfs(db);
