@@ -213,6 +213,10 @@ jobs:
             --verbose
 
       - name: Push OpenSanctions DB to R2 (push-sanctions-db)
+        # public_eval.duckdb is only written when the full pipeline runs (not
+        # --skip-pipeline). Skip gracefully when the file is absent so CI-only
+        # runs (no live AIS data) don't fail the whole workflow.
+        continue-on-error: true
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
