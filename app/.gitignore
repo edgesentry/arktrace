@@ -1,5 +1,6 @@
 node_modules/
 dist/
 .vite/
+*.tsbuildinfo
 # Override root .gitignore which ignores lib/ (Python build artifact rule)
 !src/lib/
