@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-17T00:00:00Z",
+  "generated_at": "2026-04-18T00:00:00Z",
   "base_url": "/fixtures",
   "files": [
     {
@@ -15,6 +15,13 @@
       "size_bytes": 1646,
       "table": "validation_metrics",
       "register_as": "validation_metrics.parquet"
+    },
+    {
+      "key": "fixtures/causal_effects.parquet",
+      "url": "/fixtures/causal_effects.parquet",
+      "size_bytes": 6554,
+      "table": "causal_effects",
+      "register_as": "causal_effects.parquet"
     }
   ]
 }

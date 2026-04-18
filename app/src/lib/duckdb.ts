@@ -169,6 +169,36 @@ export async function queryMetrics(
   }
 }
 
+export interface CausalEffectRow {
+  mmsi: string;
+  regime: string;
+  att_estimate: number;
+  att_ci_lower: number;
+  att_ci_upper: number;
+  p_value: number;
+  is_significant: boolean;
+}
+
+/** Query causal ATT for a single vessel. Returns null if not found or table absent. */
+export async function queryCausalEffect(
+  conn: duckdb.AsyncDuckDBConnection,
+  mmsi: string
+): Promise<CausalEffectRow | null> {
+  try {
+    const result = await conn.query(
+      `SELECT mmsi, regime, att_estimate, att_ci_lower, att_ci_upper, p_value, is_significant
+       FROM read_parquet('causal_effects.parquet')
+       WHERE mmsi = '${mmsi.replace(/'/g, "''")}'
+       LIMIT 1`
+    );
+    const rows = result.toArray();
+    if (rows.length === 0) return null;
+    return rows[0].toJSON() as CausalEffectRow;
+  } catch {
+    return null;
+  }
+}
+
 /** Derive available regions from the watchlist. */
 export async function queryRegions(
   conn: duckdb.AsyncDuckDBConnection
