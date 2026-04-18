@@ -199,6 +199,32 @@ export async function queryCausalEffect(
   }
 }
 
+/**
+ * Load 30-day score history for all vessels in one query.
+ * Returns a map of mmsi → array of 30 confidence values (oldest first).
+ * Falls back to empty map if the table is not registered yet.
+ */
+export async function queryScoreHistoryBulk(
+  conn: duckdb.AsyncDuckDBConnection
+): Promise<Map<string, number[]>> {
+  const map = new Map<string, number[]>();
+  try {
+    const result = await conn.query(
+      `SELECT mmsi, confidence
+       FROM read_parquet('score_history.parquet')
+       ORDER BY mmsi, score_date ASC`
+    );
+    for (const row of result.toArray()) {
+      const { mmsi, confidence } = row.toJSON() as { mmsi: string; confidence: number };
+      if (!map.has(mmsi)) map.set(mmsi, []);
+      map.get(mmsi)!.push(confidence);
+    }
+  } catch {
+    // table not yet synced — return empty map
+  }
+  return map;
+}
+
 /** Derive available regions from the watchlist. */
 export async function queryRegions(
   conn: duckdb.AsyncDuckDBConnection

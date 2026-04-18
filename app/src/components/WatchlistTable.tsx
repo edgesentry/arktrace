@@ -13,6 +13,51 @@ interface Props {
   onHandoffFilterChange?: (v: HandoffState | "all") => void;
   onClaim?: (mmsi: string) => void;
   exportRegion?: string;
+  scoreHistory?: Map<string, number[]>;
+}
+
+// ── Sparkline ────────────────────────────────────────────────────────────────
+
+function Sparkline({ scores }: { scores: number[] }) {
+  if (scores.length < 2) return null;
+  const W = 56, H = 14;
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+  const range = max - min || 0.01;
+  const pts = scores.map((s, i) => {
+    const x = (i / (scores.length - 1)) * W;
+    const y = H - ((s - min) / range) * H;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  // Trend: compare last 5 vs first 5
+  const first = scores.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
+  const last  = scores.slice(-5).reduce((a, b) => a + b, 0) / 5;
+  const color = last > first + 0.02 ? "#fc8181" : last < first - 0.02 ? "#68d391" : "#4a5568";
+
+  // Tooltip: last value + date label approximation
+  const lastScore = scores[scores.length - 1];
+
+  const trendLabel = last > first + 0.02 ? "↑" : last < first - 0.02 ? "↓" : "→";
+  return (
+    <span title={`Latest: ${lastScore.toFixed(3)} · 30d trend: ${trendLabel}`} style={{ display: "inline-block", lineHeight: 0 }}>
+      <svg width={W} height={H} style={{ display: "block", overflow: "visible" }}>
+        <polyline
+          points={pts.join(" ")}
+          fill="none"
+          stroke={color}
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <circle
+          cx={parseFloat(pts[pts.length - 1].split(",")[0])}
+          cy={parseFloat(pts[pts.length - 1].split(",")[1])}
+          r="1.8"
+          fill={color}
+        />
+      </svg>
+    </span>
+  );
 }
 
 const ROW_HEIGHT = 30; // px — keep in sync with row padding
@@ -73,6 +118,7 @@ export default function WatchlistTable({
   onHandoffFilterChange,
   onClaim,
   exportRegion = "all",
+  scoreHistory,
 }: Props) {
   const [search, setSearch] = useState("");
   const [hovered, setHovered] = useState<string | null>(null);
@@ -191,7 +237,7 @@ export default function WatchlistTable({
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.72rem" }}>
           <thead>
             <tr style={{ background: "#1a1f2e", position: "sticky", top: 0, zIndex: 1 }}>
-              {["Vessel", "Flag", "Type", "Conf", "Region"].map((h) => (
+              {["Vessel", "Flag", "Type", "Conf", scoreHistory?.size ? "Trend" : "Region"].map((h) => (
                 <th
                   key={h}
                   style={{
@@ -270,7 +316,7 @@ export default function WatchlistTable({
                   <td style={{ padding: "0.35rem 0.5rem", fontWeight: 700, color: confidenceColor(v.confidence) }}>
                     {v.confidence.toFixed(3)}
                   </td>
-                  <td style={{ padding: "0.35rem 0.5rem", color: "#718096", whiteSpace: "nowrap" }}>
+                  <td style={{ padding: "0.2rem 0.5rem", color: "#718096", whiteSpace: "nowrap" }}>
                     {onClaim && hovered === v.mmsi ? (
                       (() => {
                         const isClaimed = rs?.handoff_state === "in_review";
@@ -294,6 +340,8 @@ export default function WatchlistTable({
                           </button>
                         );
                       })()
+                    ) : scoreHistory?.size ? (
+                      <Sparkline scores={scoreHistory.get(v.mmsi) ?? []} />
                     ) : (
                       v.region || "—"
                     )}

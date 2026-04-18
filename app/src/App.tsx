@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { initDuckDB, queryWatchlist, queryMetrics, queryRegions } from "./lib/duckdb";
+import { initDuckDB, queryWatchlist, queryMetrics, queryRegions, queryScoreHistoryBulk } from "./lib/duckdb";
 import { initReviewSchema, getBulkReviewStates, saveReview } from "./lib/reviews";
 import { initBriefCache } from "./lib/briefCache";
 import type { DecisionTier, HandoffState } from "./lib/reviews";
@@ -42,6 +42,7 @@ export default function App() {
   const [minConfidence, setMinConfidence] = useState(0.4);
   const [reviewStates, setReviewStates] = useState<Map<string, { decision_tier: DecisionTier | null; handoff_state: HandoffState }>>(new Map());
   const [handoffFilter, setHandoffFilter] = useState<HandoffState | "all">("all");
+  const [scoreHistory, setScoreHistory] = useState<Map<string, number[]>>(new Map());
   const [alerts, setAlerts] = useState<AlertEntry[]>(() => loadAlerts());
   const [alertDrawerOpen, setAlertDrawerOpen] = useState(false);
   const prevVesselsRef = useRef<VesselRow[]>([]);
@@ -81,11 +82,13 @@ export default function App() {
     const conn = connRef.current;
     if (!conn) return;
     const region = selectedRegion === "all" ? undefined : selectedRegion;
-    const [vs, m, rs] = await Promise.all([
+    const [vs, m, rs, sh] = await Promise.all([
       queryWatchlist(conn, { minConfidence, region }),
       queryMetrics(conn),
       queryRegions(conn),
+      queryScoreHistoryBulk(conn),
     ]);
+    setScoreHistory(sh);
     const updatedAlerts = diffAndAppend(prevVesselsRef.current, vs);
     prevVesselsRef.current = vs;
     setAlerts(updatedAlerts);
@@ -233,6 +236,7 @@ export default function App() {
             onHandoffFilterChange={setHandoffFilter}
             onClaim={handleClaim}
             exportRegion={selectedRegion}
+            scoreHistory={scoreHistory}
           />
           {selectedMmsi && (() => {
             const v = vessels.find((v) => v.mmsi === selectedMmsi);
