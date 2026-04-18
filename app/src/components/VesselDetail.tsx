@@ -234,6 +234,9 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
 
     loadBrief();
     return () => { ac.abort(); };
+  // vessel.mmsi is intentional: re-fetch only when the vessel changes, not on
+  // every confidence/position update that would recreate the vessel object.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conn, vessel.mmsi]);
 
   async function handleRegenerate() {
@@ -623,7 +626,7 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
                           <button
                             onClick={() => setExpandedRationale((s) => {
                               const next = new Set(s);
-                              isExpanded ? next.delete(idx) : next.add(idx);
+                              if (isExpanded) { next.delete(idx); } else { next.add(idx); }
                               return next;
                             })}
                             style={{ background: "none", border: "none", color: "#4a5568", cursor: "pointer", fontSize: "0.6rem", padding: 0, textDecoration: "underline" }}

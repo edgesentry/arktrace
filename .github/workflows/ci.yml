@@ -59,6 +59,10 @@ jobs:
         working-directory: app
         run: npm ci
 
+      - name: ESLint
+        working-directory: app
+        run: npx eslint src/
+
       - name: Run Vitest
         working-directory: app
         run: npm test
