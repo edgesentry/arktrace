@@ -582,9 +582,6 @@ def cmd_pull(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
-    primary_prefix = _REGION_PREFIX[regions[0]]
-    db_path = f"{args.data_dir}/{primary_prefix}.duckdb"
-
     print(f"\nDone. {downloaded / 1_048_576:.1f} MB downloaded, extracted to {data_dir}/")
     print(f"Region(s): {', '.join(regions)}")
     print("\nOptional extras:")
