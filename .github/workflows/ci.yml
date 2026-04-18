@@ -38,6 +38,31 @@ jobs:
       - name: Run tests
         run: uv run --group dev python -m pytest tests/ -v
 
+  test-frontend:
+    name: Test (Frontend)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Run Vitest
+        working-directory: app
+        run: npm test
+
   lint:
     name: Lint & type check
     runs-on: ubuntu-latest
