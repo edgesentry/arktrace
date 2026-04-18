@@ -25,7 +25,13 @@ interface Props {
 
 // ── LLM brief fetcher ────────────────────────────────────────────────────────
 
-const LLM_ENDPOINT = "http://localhost:8080/v1/chat/completions";
+// VITE_LLM_ENDPOINT can be set in Cloudflare Pages environment variables to
+// point at a remote HTTPS inference endpoint.  Falls back to local llama-server
+// for development.  When the endpoint is HTTP but the page is served over HTTPS
+// the browser will block the request (mixed content); fetchBrief detects this
+// and returns "offline" immediately without attempting the fetch.
+const LLM_ENDPOINT =
+  import.meta.env.VITE_LLM_ENDPOINT ?? "http://localhost:8080/v1/chat/completions";
 const LLM_TIMEOUT_MS = 10_000;
 
 type BriefStatus = "idle" | "loading" | "cached" | "ready" | "offline" | "error";
@@ -55,6 +61,17 @@ function buildPrompt(v: VesselRow): string {
 }
 
 async function fetchBrief(v: VesselRow, signal: AbortSignal): Promise<string> {
+  // Block mixed-content before the browser does: if the page is HTTPS and the
+  // endpoint is HTTP (e.g. localhost), the fetch will be blocked by every
+  // browser.  Throw early so the caller shows "offline" instead of an error.
+  if (
+    typeof window !== "undefined" &&
+    window.location.protocol === "https:" &&
+    LLM_ENDPOINT.startsWith("http:")
+  ) {
+    throw new Error("LLM endpoint is HTTP on an HTTPS page — offline");
+  }
+
   const res = await fetch(LLM_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -515,7 +532,9 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
         {briefStatus === "offline" && (
           <div role="status" style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.35rem 0.6rem", borderRadius: 4, background: "#1a1f2e", border: "1px solid #4a5568", fontSize: "0.72rem", color: "#718096" }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4a5568", flexShrink: 0 }} />
-            Local LLM offline — start llama-server on :8080
+            {LLM_ENDPOINT.startsWith("http://localhost")
+              ? "Local LLM offline — start llama-server on :8080"
+              : "LLM offline"}
           </div>
         )}
 
