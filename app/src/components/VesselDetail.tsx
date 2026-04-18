@@ -3,6 +3,7 @@ import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import type { VesselRow } from "../lib/duckdb";
 import { queryCausalEffect } from "../lib/duckdb";
 import type { CausalEffectRow } from "../lib/duckdb";
+import { getCachedBrief, saveCachedBrief } from "../lib/briefCache";
 import {
   formatLastSeen,
   confidenceTier,
@@ -26,7 +27,7 @@ interface Props {
 const LLM_ENDPOINT = "http://localhost:8080/v1/chat/completions";
 const LLM_TIMEOUT_MS = 10_000;
 
-type BriefStatus = "idle" | "loading" | "ready" | "offline" | "error";
+type BriefStatus = "idle" | "loading" | "cached" | "ready" | "offline" | "error";
 
 function buildPrompt(v: VesselRow): string {
   const parts = [
@@ -188,41 +189,78 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
   const [shadowTooltip, setShadowTooltip] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Load brief: serve from cache if available, otherwise call LLM
   useEffect(() => {
-    // Cancel any in-flight request from the previous vessel
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
-
     setBrief("");
     setBriefStatus("loading");
 
-    const timeout = setTimeout(() => ac.abort(), LLM_TIMEOUT_MS);
-
-    fetchBrief(vessel, ac.signal)
-      .then((text) => {
+    async function loadBrief() {
+      // 1. Check cache first
+      if (conn) {
+        const cached = await getCachedBrief(conn, vessel.mmsi);
+        if (cached) {
+          if (ac.signal.aborted) return;
+          setBrief(cached);
+          setBriefStatus("cached");
+          return;
+        }
+      }
+      // 2. Cache miss — call LLM
+      const timeout = setTimeout(() => ac.abort(), LLM_TIMEOUT_MS);
+      try {
+        const text = await fetchBrief(vessel, ac.signal);
+        clearTimeout(timeout);
         if (ac.signal.aborted) return;
         setBrief(text);
         setBriefStatus("ready");
-      })
-      .catch((err: unknown) => {
+        if (conn && text) await saveCachedBrief(conn, vessel.mmsi, text);
+      } catch (err: unknown) {
+        clearTimeout(timeout);
         if (ac.signal.aborted) return;
         const msg = err instanceof Error ? err.message : String(err);
-        // Connection refused / network error → treat as offline
         const isOffline =
           msg.includes("Failed to fetch") ||
           msg.includes("fetch") ||
           msg.includes("ECONNREFUSED") ||
           msg.includes("NetworkError");
         setBriefStatus(isOffline ? "offline" : "error");
-      })
-      .finally(() => clearTimeout(timeout));
+      }
+    }
 
-    return () => {
-      ac.abort();
+    loadBrief();
+    return () => { ac.abort(); };
+  }, [conn, vessel.mmsi]);
+
+  async function handleRegenerate() {
+    if (!conn) return;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    setBrief("");
+    setBriefStatus("loading");
+    const timeout = setTimeout(() => ac.abort(), LLM_TIMEOUT_MS);
+    try {
+      const text = await fetchBrief(vessel, ac.signal);
       clearTimeout(timeout);
-    };
-  }, [vessel.mmsi]);
+      if (ac.signal.aborted) return;
+      setBrief(text);
+      setBriefStatus("ready");
+      await saveCachedBrief(conn, vessel.mmsi, text);
+    } catch (err: unknown) {
+      clearTimeout(timeout);
+      if (ac.signal.aborted) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      const isOffline =
+        msg.includes("Failed to fetch") ||
+        msg.includes("fetch") ||
+        msg.includes("ECONNREFUSED") ||
+        msg.includes("NetworkError");
+      setBriefStatus(isOffline ? "offline" : "error");
+    }
+  }
 
   // Fetch causal ATT on vessel change
   useEffect(() => {
@@ -444,87 +482,44 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
 
       {/* Analyst brief */}
       <div style={{ marginTop: "0.75rem" }}>
-        <div
-          style={{
-            fontSize: "0.65rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            color: "#4a5568",
-            marginBottom: "0.35rem",
-          }}
-        >
-          Analyst brief
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.35rem" }}>
+          <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#4a5568" }}>
+            Analyst brief
+            {briefStatus === "cached" && (
+              <span style={{ marginLeft: "0.4rem", color: "#2d6a4f", fontWeight: 600 }}>· cached</span>
+            )}
+          </div>
+          {(briefStatus === "cached" || briefStatus === "ready") && conn && (
+            <button
+              onClick={handleRegenerate}
+              style={{ background: "none", border: "none", color: "#4a5568", cursor: "pointer", fontSize: "0.62rem", padding: 0, textDecoration: "underline" }}
+            >
+              Regenerate
+            </button>
+          )}
         </div>
 
         {briefStatus === "loading" && (
-          <div
-            style={{
-              fontSize: "0.72rem",
-              color: "#4a5568",
-              fontStyle: "italic",
-            }}
-          >
+          <div style={{ fontSize: "0.72rem", color: "#4a5568", fontStyle: "italic" }}>
             Generating…
           </div>
         )}
 
         {briefStatus === "offline" && (
-          <div
-            role="status"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.4rem",
-              padding: "0.35rem 0.6rem",
-              borderRadius: 4,
-              background: "#1a1f2e",
-              border: "1px solid #4a5568",
-              fontSize: "0.72rem",
-              color: "#718096",
-            }}
-          >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: "#4a5568",
-                flexShrink: 0,
-              }}
-            />
+          <div role="status" style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.35rem 0.6rem", borderRadius: 4, background: "#1a1f2e", border: "1px solid #4a5568", fontSize: "0.72rem", color: "#718096" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4a5568", flexShrink: 0 }} />
             Local LLM offline — start llama-server on :8080
           </div>
         )}
 
         {briefStatus === "error" && (
-          <div
-            role="status"
-            style={{
-              padding: "0.35rem 0.6rem",
-              borderRadius: 4,
-              background: "#1a1f2e",
-              border: "1px solid #744210",
-              fontSize: "0.72rem",
-              color: "#f6ad55",
-            }}
-          >
+          <div role="status" style={{ padding: "0.35rem 0.6rem", borderRadius: 4, background: "#1a1f2e", border: "1px solid #744210", fontSize: "0.72rem", color: "#f6ad55" }}>
             Brief unavailable
           </div>
         )}
 
-        {briefStatus === "ready" && brief && (
-          <div
-            style={{
-              fontSize: "0.75rem",
-              color: "#cbd5e0",
-              lineHeight: 1.5,
-              padding: "0.4rem 0.6rem",
-              background: "#1a1f2e",
-              borderRadius: 4,
-              border: "1px solid #2d3748",
-              borderLeft: "3px solid #93c5fd",
-            }}
-          >
+        {(briefStatus === "ready" || briefStatus === "cached") && brief && (
+          <div style={{ fontSize: "0.75rem", color: "#cbd5e0", lineHeight: 1.5, padding: "0.4rem 0.6rem", background: "#1a1f2e", borderRadius: 4, border: "1px solid #2d3748", borderLeft: "3px solid #93c5fd" }}>
             {brief}
           </div>
         )}

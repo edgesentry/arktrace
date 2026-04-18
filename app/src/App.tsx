@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { initDuckDB, queryWatchlist, queryMetrics, queryRegions } from "./lib/duckdb";
 import { initReviewSchema, getBulkReviewStates, saveReview } from "./lib/reviews";
+import { initBriefCache } from "./lib/briefCache";
 import type { DecisionTier, HandoffState } from "./lib/reviews";
 import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
@@ -55,6 +56,7 @@ export default function App() {
         dbRef.current = db;
         connRef.current = conn;
         await initReviewSchema(conn);
+        await initBriefCache(conn);
         await doSync(db);
       } catch (err) {
         if (!cancelled) setInitError(String(err));
