@@ -221,16 +221,14 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
         setBrief(text);
         setBriefStatus("ready");
         if (conn && text) await saveCachedBrief(conn, vessel.mmsi, text);
-      } catch (err: unknown) {
+      } catch {
         clearTimeout(timeout);
         if (ac.signal.aborted) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        const isOffline =
-          msg.includes("Failed to fetch") ||
-          msg.includes("fetch") ||
-          msg.includes("ECONNREFUSED") ||
-          msg.includes("NetworkError");
-        setBriefStatus(isOffline ? "offline" : "error");
+        // Any error here is a connection failure (HTTP errors are thrown
+        // explicitly by fetchBrief before this catch). Show offline for all
+        // browsers — Safari throws "Load failed", Chrome "Failed to fetch",
+        // Firefox "NetworkError"; string-matching is fragile and unnecessary.
+        setBriefStatus("offline");
       }
     }
 
@@ -253,16 +251,10 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
       setBrief(text);
       setBriefStatus("ready");
       await saveCachedBrief(conn, vessel.mmsi, text);
-    } catch (err: unknown) {
+    } catch {
       clearTimeout(timeout);
       if (ac.signal.aborted) return;
-      const msg = err instanceof Error ? err.message : String(err);
-      const isOffline =
-        msg.includes("Failed to fetch") ||
-        msg.includes("fetch") ||
-        msg.includes("ECONNREFUSED") ||
-        msg.includes("NetworkError");
-      setBriefStatus(isOffline ? "offline" : "error");
+      setBriefStatus("offline");
     }
   }
 
