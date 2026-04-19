@@ -84,8 +84,8 @@ def fetch_gfw_detections(
         # public-global-fishing-vessels:latest requires a research-tier account.
         "datasets[0]": "public-global-presence:latest",
         "date-range": f"{start_dt.strftime('%Y-%m-%d')},{end_dt.strftime('%Y-%m-%d')}",
-        "spatial-resolution": "low",
-        "temporal-resolution": "monthly",
+        "spatial-resolution": "LOW",
+        "temporal-resolution": "MONTHLY",
         "group-by": "vesselId",
         "format": "json",
     }
