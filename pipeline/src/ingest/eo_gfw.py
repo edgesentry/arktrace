@@ -99,13 +99,15 @@ def fetch_gfw_detections(
                     "properties": {},
                     "geometry": {
                         "type": "Polygon",
-                        "coordinates": [[
-                            [lon_min, lat_min],
-                            [lon_max, lat_min],
-                            [lon_max, lat_max],
-                            [lon_min, lat_max],
-                            [lon_min, lat_min],
-                        ]],
+                        "coordinates": [
+                            [
+                                [lon_min, lat_min],
+                                [lon_max, lat_min],
+                                [lon_max, lat_max],
+                                [lon_min, lat_max],
+                                [lon_min, lat_min],
+                            ]
+                        ],
                     },
                 }
             ],
@@ -135,9 +137,7 @@ def fetch_gfw_detections(
             "wait a few minutes and retry"
         )
     if not resp.is_success:
-        raise RuntimeError(
-            f"GFW API {resp.status_code}: {resp.text[:500]}"
-        )
+        raise RuntimeError(f"GFW API {resp.status_code}: {resp.text[:500]}")
     data = resp.json()
 
     detections = []
