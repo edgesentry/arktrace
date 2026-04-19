@@ -87,7 +87,7 @@ def fetch_gfw_detections(
         "spatial-resolution": "LOW",
         "temporal-resolution": "MONTHLY",
         "group-by": "VESSEL_ID",
-        "format": "json",
+        "format": "JSON",
     }
     # Bounding box as a GeoJSON polygon (closed ring: 5 points)
     body = {
