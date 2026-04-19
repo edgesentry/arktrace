@@ -5,6 +5,13 @@ interface Props {
   onSync: () => void;
 }
 
+function formatCacheAge(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (days === 0) return "today";
+  if (days === 1) return "1 day ago";
+  return `${days} days ago`;
+}
+
 export default function SyncStatusBar({ status, onSync }: Props) {
   const base: React.CSSProperties = {
     display: "flex",
@@ -78,14 +85,17 @@ export default function SyncStatusBar({ status, onSync }: Props) {
   }
 
   if (status.phase === "ready") {
+    const ageLabel = status.oldestCacheDate
+      ? ` · Data cached ${formatCacheAge(status.oldestCacheDate)}`
+      : "";
     return (
       <div style={{ ...base, color: "#48bb78" }}>
         ✓ {status.filesLoaded} file{status.filesLoaded !== 1 ? "s" : ""} loaded
         {status.fromFixtures
           ? " (demo fixtures — sync for live data)"
           : status.fromCache
-          ? " (from OPFS cache)"
-          : " (synced from R2)"}
+          ? ` (from OPFS cache${ageLabel})`
+          : ` (synced from R2${ageLabel})`}
         <button
           onClick={onSync}
           style={{
