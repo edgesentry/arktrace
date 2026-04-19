@@ -27,9 +27,8 @@ interface Props {
 
 // VITE_LLM_ENDPOINT can be set in Cloudflare Pages environment variables to
 // point at a remote HTTPS inference endpoint.  Falls back to local llama-server
-// for development.  When the endpoint is HTTP but the page is served over HTTPS
-// the browser will block the request (mixed content); fetchBrief detects this
-// and returns "offline" immediately without attempting the fetch.
+// for development.  Chrome allows http://localhost from HTTPS pages; Safari and
+// Firefox do not — on those browsers the fetch throws and "offline" is shown.
 const LLM_ENDPOINT =
   import.meta.env.VITE_LLM_ENDPOINT ?? "http://localhost:8080/v1/chat/completions";
 const LLM_TIMEOUT_MS = 10_000;
@@ -61,17 +60,10 @@ function buildPrompt(v: VesselRow): string {
 }
 
 async function fetchBrief(v: VesselRow, signal: AbortSignal): Promise<string> {
-  // Block mixed-content before the browser does: if the page is HTTPS and the
-  // endpoint is HTTP (e.g. localhost), the fetch will be blocked by every
-  // browser.  Throw early so the caller shows "offline" instead of an error.
-  if (
-    typeof window !== "undefined" &&
-    window.location.protocol === "https:" &&
-    LLM_ENDPOINT.startsWith("http:")
-  ) {
-    throw new Error("LLM endpoint is HTTP on an HTTPS page — offline");
-  }
-
+  // Note: Chrome exempts http://localhost from mixed-content blocking (HTTPS
+  // page → HTTP localhost is allowed).  Safari and Firefox do not.  We let the
+  // fetch run unconditionally; browsers that block it will throw a network
+  // error which the caller's catch block handles uniformly as "offline".
   const res = await fetch(LLM_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
