@@ -19,8 +19,7 @@ import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import { syncAndLoad } from "./lib/opfs";
 import type { SyncStatus } from "./lib/opfs";
-import { getToken, clearToken, isPrivateModeEnabled } from "./lib/auth";
-import LoginGate from "./components/LoginGate";
+import { checkPrivateAuth, loginWithCFAccess, logoutFromCFAccess, isPrivateModeEnabled } from "./lib/auth";
 import { loadAlerts, diffAndAppend } from "./lib/alerts";
 import type { AlertEntry } from "./lib/alerts";
 import KpiBar from "./components/KpiBar";
@@ -56,9 +55,8 @@ export default function App() {
   const [alerts, setAlerts] = useState<AlertEntry[]>(() => loadAlerts());
   const [alertDrawerOpen, setAlertDrawerOpen] = useState(false);
   const prevVesselsRef = useRef<VesselRow[]>([]);
-  const [authToken, setAuthToken] = useState<string | null>(() => getToken());
   const privateMode = isPrivateModeEnabled();
-  const [showLogin, setShowLogin] = useState<boolean>(() => privateMode && !getToken());
+  const [privateAuth, setPrivateAuth] = useState<boolean>(false);
 
   // ── Initialise DuckDB-WASM once ──────────────────────────────────────────
   useEffect(() => {
@@ -71,9 +69,11 @@ export default function App() {
         connRef.current = conn;
         await initReviewSchema(conn);
         await initBriefCache(conn);
+        const authed = privateMode ? await checkPrivateAuth() : false;
+        if (!cancelled) setPrivateAuth(authed);
         // Skip auto-sync if the region picker is waiting for user input.
         if (!showRegionPicker) {
-          await doSync(db);
+          await doSync(db, undefined, authed);
         }
       } catch (err) {
         if (!cancelled) setInitError(String(err));
@@ -83,13 +83,13 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const doSync = useCallback(async (db?: AsyncDuckDB, regions?: string[]) => {
+  const doSync = useCallback(async (db?: AsyncDuckDB, regions?: string[], auth?: boolean) => {
     const target = db ?? dbRef.current;
     if (!target) return;
     const activeRegions = regions ?? selectedRegions;
     const regionFilter = activeRegions.length > 0 ? activeRegions : undefined;
     setSyncStatus({ phase: "fetching_manifest" });
-    const loaded = await syncAndLoad(target, setSyncStatus, regionFilter, authToken ?? undefined);
+    const loaded = await syncAndLoad(target, setSyncStatus, regionFilter, auth ?? privateAuth);
     if (loaded > 0 && connRef.current) {
       await refreshQuery();
     }
@@ -221,9 +221,9 @@ export default function App() {
         </span>
 
         {privateMode && (
-          authToken ? (
+          privateAuth ? (
             <button
-              onClick={() => { clearToken(); setAuthToken(null); setShowLogin(true); }}
+              onClick={logoutFromCFAccess}
               title="Sign out"
               style={{
                 background: "transparent",
@@ -239,7 +239,7 @@ export default function App() {
             </button>
           ) : (
             <button
-              onClick={() => setShowLogin(true)}
+              onClick={loginWithCFAccess}
               style={{
                 background: "transparent",
                 border: "1px solid #3b82f6",
@@ -327,18 +327,6 @@ export default function App() {
           onClose={() => setAlertDrawerOpen(false)}
           onSelectVessel={(mmsi) => setSelectedMmsi(mmsi)}
           onAlertsChange={setAlerts}
-        />
-      )}
-
-      {/* Private data login gate */}
-      {showLogin && privateMode && (
-        <LoginGate
-          onLogin={() => {
-            const token = getToken();
-            setAuthToken(token);
-            setShowLogin(false);
-            if (dbRef.current) doSync(dbRef.current);
-          }}
         />
       )}
 

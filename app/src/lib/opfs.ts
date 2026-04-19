@@ -137,10 +137,12 @@ export function isStale(
 // Manifest fetch
 // ---------------------------------------------------------------------------
 
-export async function fetchManifest(authToken?: string): Promise<Manifest> {
-  const url = authToken && PRIVATE_MANIFEST_URL ? PRIVATE_MANIFEST_URL : MANIFEST_URL;
-  const headers: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
-  const resp = await fetch(url, { cache: "no-store", headers });
+export async function fetchManifest(privateAuth?: boolean): Promise<Manifest> {
+  const url = privateAuth && PRIVATE_MANIFEST_URL ? PRIVATE_MANIFEST_URL : MANIFEST_URL;
+  const resp = await fetch(url, {
+    cache: "no-store",
+    credentials: privateAuth ? "include" : "omit",
+  });
   if (!resp.ok) {
     throw new Error(`Failed to fetch manifest (${resp.status}): ${url}`);
   }
@@ -167,13 +169,13 @@ export async function syncAndLoad(
   db: AsyncDuckDB,
   onStatus: (s: SyncStatus) => void,
   regions?: string[],
-  authToken?: string
+  privateAuth?: boolean
 ): Promise<number> {
   // ── 1. Fetch manifest ───────────────────────────────────────────────────
   onStatus({ phase: "fetching_manifest" });
   let manifest: Manifest;
   try {
-    manifest = await fetchManifest(authToken);
+    manifest = await fetchManifest(privateAuth);
   } catch {
     // No network — try OPFS cache first, then bundled fixtures
     onStatus({ phase: "loading" });
@@ -221,8 +223,9 @@ export async function syncAndLoad(
       current: f.register_as,
     });
     try {
-      const headers: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
-      const resp = await fetch(f.url, { headers });
+      const resp = await fetch(f.url, {
+        credentials: privateAuth ? "include" : "omit",
+      });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const buf = await resp.arrayBuffer();
       await opfsWriteBuffer(f.register_as, buf);
