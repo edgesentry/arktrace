@@ -7,7 +7,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/lib/**/*.ts"],
-      exclude: ["src/lib/opfs.ts", "src/lib/duckdb.ts"],
+      exclude: ["src/lib/duckdb.ts"],
       thresholds: {
         lines: 80,
       },
