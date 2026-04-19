@@ -578,6 +578,9 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
         n = ingest_eo_records(records, db_path=p.db_path)
         _ok(f"{n} EO detections ingested from GFW API")
         return True
+    except PermissionError as exc:
+        _ok(f"Skipping EO ingest — {exc}")
+        return True
     except Exception as exc:
         _fail(str(exc))
         if non_interactive:
