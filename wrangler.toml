@@ -1,0 +1,13 @@
+name                  = "arktrace"
+pages_build_output_dir = "app/dist"
+compatibility_date    = "2025-01-01"
+
+# R2 bucket binding — used by app/functions/api/reviews/push.ts
+[[r2_buckets]]
+binding     = "ARKTRACE_PUBLIC"
+bucket_name = "arktrace-public"
+
+# CF Queue producer — push.ts enqueues a merge job after every upload
+[[queues.producers]]
+binding = "REVIEW_MERGE_QUEUE"
+queue   = "arktrace-review-merge"
