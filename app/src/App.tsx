@@ -19,7 +19,7 @@ import type { VesselRow, MetricsRow } from "./lib/duckdb";
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import { syncAndLoad } from "./lib/opfs";
 import type { SyncStatus } from "./lib/opfs";
-import { pushReviews, pullRemoteReviews } from "./lib/push";
+import { pushReviews, mergeDownloadedReviews } from "./lib/push";
 import type { PushStatus } from "./lib/push";
 import { checkPrivateAuth, login, logout, isPrivateModeEnabled, getAuthToken } from "./lib/auth";
 import { loadConfig } from "./lib/config";
@@ -105,8 +105,8 @@ export default function App() {
     const loaded = await syncAndLoad(target, setSyncStatus, regionFilter, isAuthed, activeCfg, token);
     if (loaded > 0 && connRef.current) {
       // Pull remote reviews from R2 and merge into local DuckDB before refreshing UI
-      await pullRemoteReviews(target, connRef.current).catch((err) =>
-        console.warn("[sync] pullRemoteReviews failed:", err)
+      await mergeDownloadedReviews(connRef.current).catch((err) =>
+        console.warn("[sync] mergeDownloadedReviews failed:", err)
       );
       await refreshQuery();
     }

@@ -2,21 +2,22 @@
  * POST /api/reviews/push
  *
  * Accepts vessel_reviews, vessel_reviews_audit, and analyst_briefs as Parquet
- * files in a multipart FormData body, then writes them to R2 under a per-user
- * prefix.  After writing, it updates reviews/index.json so other clients can
- * discover and pull the changes on their next sync.
+ * files in a multipart FormData body, then:
+ *   1. Writes them to R2 under reviews/<email>/ (per-user prefix).
+ *   2. Enqueues a merge job to the CF Queue (arktrace-review-merge).
+ *
+ * The queue consumer (workers/review-merge-consumer/) picks up the job and
+ * calls POST /api/reviews/merge on the Python pipeline server, which runs
+ * `sync_r2.py merge-reviews` to produce a single reviews/merged/*.parquet and
+ * patches ducklake_manifest.json so all clients detect the update on next sync.
  *
  * Auth: Cloudflare Access injects Cf-Access-Authenticated-User-Email
- * automatically before the request reaches this function.  Requests that
- * lack the header (unauthenticated) receive a 401.
+ * automatically.  Requests lacking the header receive 401.
  */
 
 interface Env {
   ARKTRACE_PUBLIC: R2Bucket;
-}
-
-interface ReviewsIndex {
-  users: { email: string; updatedAt: string }[];
+  REVIEW_MERGE_QUEUE: Queue;
 }
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
@@ -44,26 +45,17 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const now     = new Date().toISOString();
   const putOpts = { httpMetadata: { contentType: "application/octet-stream" } };
 
+  // 1. Write per-user Parquet files to R2
   await Promise.all([
     ctx.env.ARKTRACE_PUBLIC.put(`${prefix}/reviews.parquet`, await reviews.arrayBuffer(), putOpts),
     ctx.env.ARKTRACE_PUBLIC.put(`${prefix}/audit.parquet`,   await audit.arrayBuffer(),   putOpts),
     ctx.env.ARKTRACE_PUBLIC.put(`${prefix}/briefs.parquet`,  await briefs.arrayBuffer(),  putOpts),
   ]);
 
-  // Update reviews/index.json — upsert this user's entry
-  const indexKey = "reviews/index.json";
-  let index: ReviewsIndex = { users: [] };
-  const existing = await ctx.env.ARKTRACE_PUBLIC.get(indexKey);
-  if (existing) {
-    try { index = await existing.json<ReviewsIndex>(); } catch { /* reset on corrupt */ }
-  }
-  index.users = [
-    ...index.users.filter((u) => u.email !== email),
-    { email, updatedAt: now },
-  ];
-  await ctx.env.ARKTRACE_PUBLIC.put(indexKey, JSON.stringify(index), {
-    httpMetadata: { contentType: "application/json" },
-  });
+  // 2. Enqueue merge job — queue consumer calls pipeline /api/reviews/merge
+  ctx.waitUntil(
+    ctx.env.REVIEW_MERGE_QUEUE.send({ email, triggeredAt: now })
+  );
 
   return json({ ok: true, email, updatedAt: now }, 200);
 };
