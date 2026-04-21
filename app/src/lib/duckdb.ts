@@ -25,6 +25,7 @@ const BUNDLES = duckdb.getJsDelivrBundles();
 
 let _db: duckdb.AsyncDuckDB | null = null;
 let _conn: duckdb.AsyncDuckDBConnection | null = null;
+const _registeredFiles = new Set<string>();
 
 /** Initialise DuckDB-WASM once; subsequent calls return the cached instance. */
 export async function initDuckDB(): Promise<{
@@ -59,6 +60,12 @@ export async function registerParquet(
   buffer: ArrayBuffer
 ): Promise<void> {
   await db.registerFileBuffer(name, new Uint8Array(buffer));
+  _registeredFiles.add(name);
+}
+
+/** Returns true if the named Parquet file has been registered. */
+export function isParquetRegistered(name: string): boolean {
+  return _registeredFiles.has(name);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +192,7 @@ export async function queryCausalEffect(
   conn: duckdb.AsyncDuckDBConnection,
   mmsi: string
 ): Promise<CausalEffectRow | null> {
+  if (!isParquetRegistered("causal_effects.parquet")) return null;
   try {
     const result = await conn.query(
       `SELECT mmsi, regime, att_estimate, att_ci_lower, att_ci_upper, p_value, is_significant
@@ -209,6 +217,7 @@ export async function queryScoreHistoryBulk(
   conn: duckdb.AsyncDuckDBConnection
 ): Promise<Map<string, number[]>> {
   const map = new Map<string, number[]>();
+  if (!isParquetRegistered("score_history.parquet")) return map;
   try {
     const result = await conn.query(
       `SELECT mmsi, confidence
