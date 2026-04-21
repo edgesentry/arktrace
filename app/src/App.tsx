@@ -283,6 +283,9 @@ export default function App() {
                     clearInterval(timer);
                     const email = await checkPrivateAuth(appConfig);
                     setUserEmail(email);
+                    if (email) {
+                      await doSync(undefined, undefined, true, appConfig);
+                    }
                   }
                 }, 500);
               }}
