@@ -52,7 +52,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import duckdb
@@ -139,6 +139,7 @@ class CausalEffect:
     p_value: float
     is_significant: bool  # p < ALPHA
     calibrated_weight: float  # suggested graph_risk_score weight
+    treated_mmsis: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -623,6 +624,7 @@ def run_causal_model(
                 p_value=pooled["p"],
                 is_significant=is_sig,
                 calibrated_weight=DEFAULT_GRAPH_WEIGHT,  # filled below
+                treated_mmsis=treated,
             )
             effects.append(effect)
 
@@ -638,36 +640,49 @@ def run_causal_model(
 
 
 def effects_to_dataframe(effects: list[CausalEffect]) -> pl.DataFrame:
-    """Convert a list of CausalEffect objects to a Polars DataFrame."""
+    """Convert a list of CausalEffect objects to a per-vessel Polars DataFrame.
+
+    Each treated vessel gets one row with the regime-level ATT estimate.
+    Vessels that appear in multiple regimes get one row per regime.
+    """
+    _SCHEMA = {
+        "mmsi": pl.Utf8,
+        "regime": pl.Utf8,
+        "label": pl.Utf8,
+        "n_treated": pl.Int32,
+        "n_control": pl.Int32,
+        "att_estimate": pl.Float64,
+        "att_ci_lower": pl.Float64,
+        "att_ci_upper": pl.Float64,
+        "p_value": pl.Float64,
+        "is_significant": pl.Boolean,
+        "calibrated_weight": pl.Float64,
+    }
     if not effects:
-        return pl.DataFrame(
-            schema={
-                "regime": pl.Utf8,
-                "label": pl.Utf8,
-                "n_treated": pl.Int32,
-                "n_control": pl.Int32,
-                "att_estimate": pl.Float64,
-                "att_ci_lower": pl.Float64,
-                "att_ci_upper": pl.Float64,
-                "p_value": pl.Float64,
-                "is_significant": pl.Boolean,
-                "calibrated_weight": pl.Float64,
-            }
-        )
-    return pl.DataFrame(
-        {
-            "regime": [e.regime for e in effects],
-            "label": [e.label for e in effects],
-            "n_treated": [e.n_treated for e in effects],
-            "n_control": [e.n_control for e in effects],
-            "att_estimate": [e.att_estimate for e in effects],
-            "att_ci_lower": [e.att_ci_lower for e in effects],
-            "att_ci_upper": [e.att_ci_upper for e in effects],
-            "p_value": [e.p_value for e in effects],
-            "is_significant": [e.is_significant for e in effects],
-            "calibrated_weight": [e.calibrated_weight for e in effects],
-        }
-    )
+        return pl.DataFrame(schema=_SCHEMA)
+
+    rows: list[dict] = []
+    for e in effects:
+        for mmsi in e.treated_mmsis:
+            rows.append(
+                {
+                    "mmsi": mmsi,
+                    "regime": e.regime,
+                    "label": e.label,
+                    "n_treated": e.n_treated,
+                    "n_control": e.n_control,
+                    "att_estimate": e.att_estimate,
+                    "att_ci_lower": e.att_ci_lower,
+                    "att_ci_upper": e.att_ci_upper,
+                    "p_value": e.p_value,
+                    "is_significant": e.is_significant,
+                    "calibrated_weight": e.calibrated_weight,
+                }
+            )
+
+    if not rows:
+        return pl.DataFrame(schema=_SCHEMA)
+    return pl.DataFrame(rows, schema=_SCHEMA)
 
 
 def write_effects(df: pl.DataFrame, output_path: str = DEFAULT_OUTPUT_PATH) -> None:
