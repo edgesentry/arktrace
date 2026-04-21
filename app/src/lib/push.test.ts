@@ -31,6 +31,7 @@ const NONE_CONFIG: AppConfig = {
 
 function makeDb() {
   return {
+    registerFileBuffer: vi.fn().mockResolvedValue(undefined),
     copyFileToBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
     dropFile: vi.fn().mockResolvedValue(undefined),
   };
