@@ -64,6 +64,7 @@ export async function pushReviews(
 
   const form = new FormData();
   for (const { table, file, field } of exports) {
+    await db.registerFileBuffer(file, new Uint8Array(0));
     await conn.query(`COPY ${table} TO '${file}' (FORMAT PARQUET)`);
     const bytes = await db.copyFileToBuffer(file);
     await db.dropFile(file);
