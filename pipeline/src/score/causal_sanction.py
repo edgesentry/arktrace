@@ -664,19 +664,21 @@ def effects_to_dataframe(effects: list[CausalEffect]) -> pl.DataFrame:
     rows: list[dict] = []
     for e in effects:
         for mmsi in e.treated_mmsis:
-            rows.append({
-                "mmsi": mmsi,
-                "regime": e.regime,
-                "label": e.label,
-                "n_treated": e.n_treated,
-                "n_control": e.n_control,
-                "att_estimate": e.att_estimate,
-                "att_ci_lower": e.att_ci_lower,
-                "att_ci_upper": e.att_ci_upper,
-                "p_value": e.p_value,
-                "is_significant": e.is_significant,
-                "calibrated_weight": e.calibrated_weight,
-            })
+            rows.append(
+                {
+                    "mmsi": mmsi,
+                    "regime": e.regime,
+                    "label": e.label,
+                    "n_treated": e.n_treated,
+                    "n_control": e.n_control,
+                    "att_estimate": e.att_estimate,
+                    "att_ci_lower": e.att_ci_lower,
+                    "att_ci_upper": e.att_ci_upper,
+                    "p_value": e.p_value,
+                    "is_significant": e.is_significant,
+                    "calibrated_weight": e.calibrated_weight,
+                }
+            )
 
     if not rows:
         return pl.DataFrame(schema=_SCHEMA)
