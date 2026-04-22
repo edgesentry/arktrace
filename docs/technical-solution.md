@@ -8,6 +8,27 @@ arktrace is a **Causal Inference Engine for Shadow Fleet Prediction**. The prima
 
 **What this is:** A Difference-in-Differences (DiD) framework that tests, for each vessel, whether behavioural change was *causally triggered* by a specific sanction announcement — using HC3-robust OLS to distinguish genuine evasion responses from normal commercial variation. Vessels that pass the causal filter are then propagated through the ownership graph to surface connected unknown-unknown threats before any designation occurs.
 
+**Decision-to-Dispatch flow**
+
+```
+DATA INGESTION
+  AIS · Vessel registry · Sanctions lists · Trade flows · GDELT · EO/SAR
+          │
+          ▼
+LAYER 1 — BEHAVIOURAL SUBSTRATE
+  HDBSCAN baseline · Isolation Forest · Lance Graph BFS · SHAP attribution
+          │
+          ▼
+LAYER 2 — C3 CAUSAL INFERENCE ENGINE
+  DiD OLS · HC3 robust SE · ATT ± 95% CI · p < 0.05 (configurable)
+          │
+          ├─► Known fleet: ranked watchlist by causal confidence
+          └─► Unknown-unknown detector: pre-designation evasion signatures
+          │
+          ▼
+ANALYST DASHBOARD  →  PATROL DISPATCH BRIEF
+```
+
 | Model component | Implementation | Role |
 |---|---|---|
 | C3 DiD causal model | `src/score/causal_sanction.py` | Tests causal response to sanction events; primary innovation |
