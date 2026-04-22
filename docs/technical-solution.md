@@ -528,6 +528,8 @@ For live streaming (aisstream.io), the incremental update pipeline runs in under
 
 **Edge gateway benchmark (measured):** Re-scoring 5,000 vessels — feature matrix (`build_matrix.py`) + composite scoring (HDBSCAN + Isolation Forest + SHAP) + watchlist output — completes in **5.75 seconds** on a 14-core Apple M-series laptop. On a constrained 4-core / 4 GB edge gateway (Raspberry Pi 4 / NVIDIA Jetson Nano class), the same pipeline is well within the 30-second target given the pipeline is CPU-bound on the HDBSCAN and Isolation Forest steps which scale sub-linearly with vessel count. See `scripts/benchmark_rescore.py` and `docs/deployment.md` for the full benchmark command and reproduction instructions.
 
+**Temporal granularity — 15-minute re-score cadence:** Because a full re-score completes in under 30 seconds, the pipeline is scheduled to run every 15 minutes against the live AIS stream. This cadence directly enables detection of *sudden evasion*: a vessel that switches off its AIS transponder immediately after a sanctions announcement will appear in the re-ranked watchlist within 15 minutes — before it clears the patrol area. Competing approaches that aggregate AIS over 24-hour or 7-day windows cannot surface this intra-day signal. The 15-minute interval was chosen to match the typical AIS reporting frequency for vessels in constrained waterways (Malacca/Singapore Strait transit ~2–4 hours), giving patrol commanders multiple re-score cycles before the vessel exits the operational zone.
+
 ---
 
 ## Open-Source Model and IP Protection
