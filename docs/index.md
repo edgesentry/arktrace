@@ -19,6 +19,15 @@ A shadow fleet vessel moves sanctioned oil or cargo while deliberately hiding wh
 
 Conventional tools detect individual techniques in isolation. arktrace goes further: it uses causal inference to identify vessels whose evasion behaviour was *triggered by* specific sanction events, separating genuine evasion from ordinary commercial route changes, and propagates signals through the ownership network to surface connected threats not yet on any list.
 
+**The key distinction — Red Sea rerouting vs. OFAC response:**
+
+| Vessel behaviour | Conventional tool | arktrace |
+|---|---|---|
+| Tanker reroutes Suez → Cape of Good Hope after Red Sea conflict escalation (2024) | ⚠️ Flagged — anomalous route, longer dark periods | ✅ De-prioritised — GDELT captures macro conflict driver; DiD ATT ≈ 0; no causal sanctions link |
+| Tanker goes dark near Bandar Abbas 18 h after OFAC targets its fleet operator | ✅ Possibly flagged — AIS gap detected | 🚨 Top-ranked — ATT = +0.41 (p = 0.003); causal response to specific sanctions trigger confirmed |
+
+The first vessel is a commercial detour; the second is evasion intent. Only arktrace can tell them apart at scale.
+
 The default area of interest is the Strait of Malacca and Singapore Strait — the world's busiest shipping lane. Five regions are supported: Singapore/Malacca Strait, Japan Sea, Middle East, Europe, and US Gulf.
 
 ---
