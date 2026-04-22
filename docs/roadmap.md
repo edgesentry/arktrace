@@ -48,7 +48,7 @@
 
 ---
 
-### A4 · Scoring Engine and Watchlist Output ⬜
+### A4 · Scoring Engine and Watchlist Output ✅
 
 **Goal:** Ranked candidate watchlist with SHAP explanations and analyst dashboard.
 
@@ -59,7 +59,7 @@
 - Watchlist Output `candidate_watchlist.parquet` (`src/score/watchlist.py`)
 - React + TypeScript + Vite SPA with MapLibre GL JS and ranked watchlist table (`app/`). In-browser OLAP via DuckDB-WASM; Parquet files fetched from Cloudflare R2 and cached in OPFS. Deployed to Cloudflare Pages.
 - Human-in-the-Loop Triage System: Tier taxonomy, dashboard review UI, local DuckDB-WASM `vessel_reviews` table, push to R2 via CF Pages Function, server-side merge via CF Queue (`app/src/lib/reviews.ts`, `app/functions/api/reviews/push.ts`). Feedback-driven evaluation (`pipeline/src/score/review_feedback_evaluation.py`).
-- **[TODO]** Geopolitical Context Layer (GDELT + RAG): Add daily GDELT event ingestion and local LLM-generated analyst briefs to the dashboard. Includes interactive chat.
+- Geopolitical Context Layer (GDELT + RAG): Daily GDELT event ingestion (`pipeline/src/ingest/gdelt.py`, Step 10 in `run_pipeline.py`); GDELT macro-event covariates wired into DiD regression controls; LLM-generated analyst dispatch briefs with interactive chat in the dashboard (`app/src/components/VesselDetail.tsx`).
 
 **Acceptance:** Precision@50 ≥ 0.6 (≥ 30 of top-50 candidates are OFAC-listed vessels); SHAP explanations are human-readable and match analyst intuition on manually inspected cases; dashboard supports rapid review and pipeline re-training.
 
