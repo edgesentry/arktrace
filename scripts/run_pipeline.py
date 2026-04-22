@@ -8,7 +8,7 @@ Usage (non-interactive):
     uv run python scripts/run_pipeline.py --region singapore --non-interactive
     uv run python scripts/run_pipeline.py --region japan --non-interactive
 
-Available regions: singapore, japan, middleeast, europe, persiangulf, blacksea
+Available regions: singapore, japan, middleeast, europe, persiangulf, blacksea, gulfofaden, gulfofguinea, gulfofmexico
 """
 
 from __future__ import annotations
