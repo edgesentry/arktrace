@@ -35,7 +35,7 @@ const LLM_TIMEOUT_MS = 45_000;
 
 type BriefStatus = "idle" | "loading" | "cached" | "ready" | "offline" | "error";
 
-const SYSTEM_PROMPT =
+export const SYSTEM_PROMPT =
   `You are a maritime intelligence analyst writing patrol dispatch briefs. ` +
   `You will be given a structured vessel context block containing pre-computed scores, ` +
   `SHAP signal attributions, and verified registry data. Your only job is to synthesise ` +
@@ -48,7 +48,7 @@ const SYSTEM_PROMPT =
   `- Output plain text only — no markdown, no bullet points, no headers.\n` +
   `- Maximum 3 sentences.`;
 
-function buildUserContent(v: VesselRow): string {
+export function buildUserContent(v: VesselRow): string {
   const parts = [
     `Vessel: ${v.vessel_name || v.mmsi}`,
     `MMSI: ${v.mmsi}`,
