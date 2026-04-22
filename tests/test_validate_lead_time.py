@@ -7,7 +7,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import polars as pl
-import pytest
 
 from scripts.validate_lead_time_ofac import (
     CONFIDENCE_THRESHOLD,
@@ -126,7 +125,6 @@ def test_retrospective_pre_designation_detection():
     # Vessel designated 90 days from now; detection window starts 30 days ago → +60 day lead
     now = datetime.now(UTC)
     designation_date = now + timedelta(days=60)
-    last_seen = now  # window_start = now - 30d → lead = desig - window_start = 90d
 
     wl = pl.DataFrame([_watchlist_row("111111111", confidence=0.50, last_seen=None)])
     dates = {"111111111": designation_date}
