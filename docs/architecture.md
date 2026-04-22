@@ -37,6 +37,7 @@
 │  AIS positions ──────────────────► DuckDB (ais_positions table) │
 │  Sanctions entities ─────────────► DuckDB (sanctions_entities)  │
 │  Vessel ownership chains ────────► Lance Graph (on-disk files)  │
+│  GDELT events ───────────────────► Lance (gdelt.lance dataset)  │
 │  Trade flow by route ────────────► DuckDB (trade_flow table)    │
 │  Custom feeds (step 5) ──────────► DuckDB (auto-detected type)  │
 │    · AIS CSV → ais_positions                                    │
@@ -107,6 +108,8 @@
 │                                                                 │
 │  Analyst reviews ──► CF Pages Function ──► R2 ──► CF Queue     │
 │                       (POST /api/reviews/push)   (merge job)    │
+│  CF Queue consumer ─► pipeline API ──► merge Parquet reviews    │
+│                        (POST /api/reviews/merge)                │
 │                                                                 │
 │  LLM brief ─────────► OpenAI-compatible endpoint (browser call) │
 └─────────────────────────────────────────────────────────────────┘
@@ -219,7 +222,7 @@ Triggers: weekly cron (Monday 02:00 UTC) and after every successful
 `Public Backtest Integration` run on `main`.
 
 1. Pull custom feed CSVs from `arktrace-private-capvista` → `_inputs/custom_feeds/` (`continue-on-error`; forks skip gracefully).
-2. Run the full 9-step pipeline for all five regions in seed mode (`--seed-dummy`). Custom feeds are ingested at step 5 and their signals appear in all downstream scoring.
+2. Run backtest for **four regions** (`singapore,japan,europe,blacksea`) with `--skip-pipeline`: watchlists are pre-pulled from R2 rather than regenerated from scratch. `--seed-dummy` is passed for consistent dummy-MMSI filter behaviour, but no full pipeline re-run occurs in CI.
 3. Push generation zip (`<timestamp>.zip`) to `arktrace-public`; delete previous generation (`--keep 1`).
 4. Push `demo.zip` (lightweight bundle for quick developer setup).
 5. Push `public_eval.duckdb` (OpenSanctions DB).
@@ -358,22 +361,21 @@ The LLM converts a deterministic, structured risk assessment into readable Engli
 
 **Use cases:**
 
-| Code | Input | Output |
-|------|-------|--------|
-| C2 — Analyst brief | Vessel profile + SHAP `top_signals` + 3 GDELT events | One-paragraph risk summary per vessel |
-| C6 — Analyst chat | Fleet overview + optional vessel detail + analyst question | Grounded factual answer |
+| Code | Input | Output | Where |
+|------|-------|--------|-------|
+| C2 — Analyst brief | Vessel profile + SHAP `top_signals` + 3 GDELT events | One-paragraph risk summary per vessel | **Browser app** (`app/src/components/VesselDetail.tsx`) — not in the pipeline |
+| C6 — Analyst chat | Fleet overview + optional vessel detail + analyst question | Grounded factual answer | **Browser app** |
+
+> **Note:** The `analyst_briefs` table schema exists in `pipeline/src/ingest/schema.py` as a caching target, but LLM calls are made client-side in the browser. The pipeline does not call any LLM endpoint.
 
 **Provider selection:** controlled by `LLM_PROVIDER` environment variable.
 
 | Value | Backend |
 |-------|---------|
-| `llamacpp` *(default)* | Bundled llamacpp server — no external process required |
-| `ollama` | Ollama local server |
+| `openai` *(default)* | Any OpenAI-compatible endpoint (local llama-server or remote) |
 | `anthropic` | Anthropic API (requires `LLM_API_KEY`) |
-| `gemini` | Google Gemini API (requires `LLM_API_KEY`) |
-| `openai` | Any OpenAI-compatible endpoint |
 
-Recommended local model: **Gemma 4 4B Instruct (Q4_K_M)** via llamacpp — downloaded automatically on first `docker compose up`. Context window fits within ~1 200 tokens; no GPU required.
+Recommended local model: **Qwen2.5-7B-Instruct-GGUF (Q4_K_M)** via llama-server — Apache 2.0 licence, commercially usable, no GPU required. Gemma models are explicitly **not recommended** due to Google Gemma ToS restrictions on government/defence use.
 
 **No cloud dependency:** inference runs entirely on-device by default. The LLM has no tool access, no function calling, and no internet connectivity during inference. Context is injected via the context window only.
 
