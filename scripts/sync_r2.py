@@ -1549,7 +1549,10 @@ def _ais_db_candidates(data_dir: Path, regions: list[str] | None) -> list[Path]:
     Otherwise every non-excluded .duckdb in data_dir is a candidate.
     """
     _EXCLUDE_STEMS = {
-        "backtest_demo", "public_eval", "mpol", "catalog",
+        "backtest_demo",
+        "public_eval",
+        "mpol",
+        "catalog",
     }
     candidates = []
     if regions:
