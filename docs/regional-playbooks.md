@@ -27,6 +27,14 @@ Understanding which regions carry the most weight in global maritime security he
 
 **Primary signals:** AIS gaps during transit, STS transfers at known anchorages (West of Batam, Karimata Strait), high-risk flag states, vessels with direct ownership links to OFAC/EU-listed entities.
 
+| | |
+|---|---|
+| **Target** | Iranian, Russian, and Venezuelan shadow tankers blending crude at Singapore anchorages |
+| **Key signals** | AIS dark periods during transit · STS transfers (West of Batam, Karimata Strait) · OFAC/EU ownership proximity |
+| **Watchlist** | Top 100 tankers · confidence ≥ 0.55 · sort by `sts_candidate_count`, `sanctions_distance` |
+| **AOI** | Singapore / Malacca Strait — `5°S–22°N, 92°–122°E` |
+| **Threat volume** | ~40% of global seaborne trade transits; shadow fleet active year-round |
+
 ### Step-by-step configuration
 
 **A1 — AIS ingestion**
@@ -100,6 +108,14 @@ Note: a larger bbox increases WebSocket message volume significantly. Reduce `--
 **Who:** Analyst at Japan Coast Guard, a UN Panel of Experts on DPRK, or a sanctions intelligence firm monitoring North Korean coal exports and fuel imports in violation of UN Security Council resolutions (UNSCR 2371, 2375, 2397).
 
 **Primary signals:** Vessels going dark near DPRK waters, position jumps (GPS spoofing is endemic near the Korean Peninsula), STS transfers in the East China Sea, ownership links to DPRK-adjacent shell companies, high `cluster_sanctions_ratio` in the Lance Graph (DPRK-connected networks are tightly clustered).
+
+| | |
+|---|---|
+| **Target** | DPRK-linked vessels exporting coal and importing petroleum in violation of UNSCR 2371/2375/2397 |
+| **Key signals** | AIS dark periods near DPRK coastal waters · GPS position jumps · STS in East China Sea · UN list proximity |
+| **Watchlist** | Top 50 tankers/cargo · confidence ≥ 0.60 · sort by `position_jump_count`, `ais_gap_count_30d`, `sanctions_distance` |
+| **AOI** | Japan Sea / East China Sea — `25°–48°N, 115°–145°E` · tight DPRK corridor `36°–42°N, 124°–132°E` |
+| **Threat volume** | DPRK coal/petroleum violations are low-frequency but high-severity; 60-day AIS window recommended |
 
 ### Step-by-step configuration
 
@@ -194,6 +210,14 @@ DB_PATH=data/processed/japansea.duckdb \
 **Who:** USCG maritime intelligence officer or OFAC compliance analyst monitoring Venezuelan crude smuggling through the Caribbean, Gulf of Mexico STS operations, and Cuban embargo violations.
 
 **Primary signals:** STS transfers in the Gulf of Mexico (particularly the Yucatan Channel and offshore platforms), vessels transiting between Venezuela and US-adjacent waters, flag-of-convenience vessels with weak port state control history.
+
+| | |
+|---|---|
+| **Target** | Venezuelan crude smugglers, Caribbean STS operators, Cuban embargo violators |
+| **Key signals** | STS transfers (Yucatan Channel, offshore platforms) · Venezuela–US corridor transits · weak PSC flag states |
+| **Watchlist** | Top 75 tankers/cargo · confidence ≥ 0.50 · sort by `sts_candidate_count`, `high_risk_flag_ratio` |
+| **AOI** | Gulf of Mexico / Caribbean — `8°–32°N, 98°–60°W` |
+| **Threat volume** | Dense legitimate traffic; broader screening net required — Marine Cadastre available for US-region historical backfill |
 
 ### Step-by-step configuration
 
@@ -306,6 +330,14 @@ Each region gets its own DuckDB file. Run the full feature + scoring pipeline se
 **Who:** Analyst at EMSA (European Maritime Safety Agency), a national coast guard (e.g., UK HMCG, Danish Maritime Authority), or an EU sanctions compliance team monitoring Russian crude exports following the February 2022 invasion of Ukraine and the G7 price cap regime.
 
 **Primary signals:** AIS dark periods near Russian Baltic export terminals (Primorsk, Ust-Luga), STS transfers in international waters off the Greek coast or the Strait of Gibraltar, vessels transiting the Bosphorus with suspiciously low declared cargo values, rapid flag changes away from EU/G7 registries, ownership chains routed through UAE or Turkey to obscure Russian beneficial ownership.
+
+| | |
+|---|---|
+| **Target** | Russian shadow fleet evading G7 price cap — estimated 400–600 vessels globally |
+| **Key signals** | AIS dark periods near Primorsk/Ust-Luga · STS off Greece/Gibraltar · flag/name cycling (Palau, Gabon, Cameroon) · UAE/Turkey ownership chains |
+| **Watchlist** | Top 75 tankers · confidence ≥ 0.55 · sort by `flag_changes_2y`, `owner_changes_2y`, `sts_candidate_count` |
+| **AOI** | Baltic / North Sea / Mediterranean / Black Sea — `30°–72°N, 22°W–42°E` |
+| **Threat volume** | ~400–600 active shadow vessels; identity volatility is the strongest discriminating signal |
 
 **Key sub-regions:**
 
@@ -440,6 +472,14 @@ EOF
 **Why this region ranks #1:** Iran exports an estimated 1.5–2.0 million barrels per day in violation of OFAC sanctions, almost entirely via shadow tankers. The Strait of Hormuz (21°N, 57°E) is the single most critical maritime chokepoint — 20% of global oil flows through it. Since late 2023 the Red Sea has become a kinetic threat zone, forcing rerouting around the Cape of Good Hope and creating new shadow fleet opportunities in the Indian Ocean.
 
 **Primary signals:** Repeated AIS gaps in the Arabian Gulf (loading at Kharg Island or Bandar Abbas without declaring), STS transfers off Fujairah (UAE) and in the Gulf of Oman, position jumps near Hormuz (Iranian GPS jamming is documented), vessels rebranding between Iranian and Malaysian/Chinese flags, ownership chains to IRGC-linked holding companies.
+
+| | |
+|---|---|
+| **Target** | Iranian crude shadow tankers (~1.5–2.0 mbpd illicit exports); IRGC-linked networks |
+| **Key signals** | AIS dark loading at Kharg Island/Bandar Abbas · STS off Fujairah · GPS spoofing near Hormuz · IRGC ownership proximity |
+| **Watchlist** | Top 100 tankers · confidence ≥ 0.60 · sort by `ais_gap_count_30d`, `ais_gap_max_hours`, `position_jump_count`, `sts_candidate_count` |
+| **AOI** | Arabian Gulf / Strait of Hormuz / Red Sea / Indian Ocean — `10°S–30°N, 32°–80°E` |
+| **Threat volume** | ~300–400 active Iranian shadow vessels; highest-priority region globally — 20% of world oil flows through Hormuz |
 
 **Key sub-regions:**
 
