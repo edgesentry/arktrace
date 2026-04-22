@@ -2,7 +2,7 @@
 
 Weight calibration
 ------------------
-The ``w_graph`` parameter (default 0.40) can be automatically calibrated using
+The ``w_graph`` parameter (default 0.55) can be automatically calibrated using
 the C3 causal sanction-response model::
 
     from pipeline.src.score.causal_sanction import run_causal_model, calibrate_graph_weight
