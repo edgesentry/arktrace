@@ -6,13 +6,11 @@ name: Publish data to R2
 # Triggers:
 #   - Daily schedule (01:00 UTC) — keeps watchlists and artifacts fresh
 #   - Automatically after Public Backtest Integration completes on main
-#   - Weekly schedule (every Monday 02:00 UTC) — explicit publish cadence (#209)
 #   - Manual dispatch
 
 on:
   schedule:
     - cron: '0 1 * * *'   # daily 01:00 UTC
-    - cron: '0 2 * * 1'   # every Monday 02:00 UTC
   workflow_dispatch:
   workflow_run:
     workflows: ["Public Backtest Integration"]
