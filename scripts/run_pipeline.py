@@ -592,7 +592,13 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
         except Exception as exc:
             _ok(f"Parquet ingest failed ({exc}); falling back to GFW API")
 
-    # --- fall back to live API ---
+    # --- fall back to live API (interactive / local only) ---
+    # In non-interactive (CI) mode the GFW API is called by the dedicated
+    # gfw-ingest.yml workflow; data-publish pulls the resulting parquet above.
+    if non_interactive:
+        _ok("No pre-fetched EO parquet found — skipping (gfw-ingest.yml populates this weekly)")
+        return True
+
     tokens = [t for t in [os.getenv("GFW_API_TOKEN", "")] if t]
     tokens += [v for k, v in sorted(os.environ.items()) if k.startswith("GFW_API_TOKEN_") and v]
     if not tokens:
