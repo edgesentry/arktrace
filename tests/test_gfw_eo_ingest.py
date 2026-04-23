@@ -264,17 +264,40 @@ def test_step_eo_ingest_prefers_parquet_over_api(tmp_path, monkeypatch):
 
 
 def test_step_eo_ingest_falls_back_to_api_when_no_parquet(tmp_path, monkeypatch):
-    """step_eo_ingest calls GFW API when no parquet exists."""
+    """step_eo_ingest returns True when no parquet exists (API or skip path)."""
+    monkeypatch.setenv("ARKTRACE_DATA_DIR", str(tmp_path))
+    # Remove all GFW tokens so the function takes the graceful-skip path,
+    # which is still the non-parquet code path and is reliably testable
+    # without fragile mock-call-count assertions.
+    monkeypatch.delenv("GFW_API_TOKEN", raising=False)
+    for i in range(1, 5):
+        monkeypatch.delenv(f"GFW_API_TOKEN_{i}", raising=False)
+
+    from scripts.run_pipeline import PRESETS, step_eo_ingest
+
+    preset = PRESETS["singapore"]
+    result = step_eo_ingest(preset, non_interactive=True)
+
+    assert result is True
+
+
+def test_step_eo_ingest_api_path_returns_true_with_token(tmp_path, monkeypatch):
+    """step_eo_ingest returns True on the live-API path when token is set."""
     monkeypatch.setenv("ARKTRACE_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("GFW_API_TOKEN", "test-token")
+
+    import pipeline.src.ingest.eo_gfw as eo_mod
 
     from scripts.run_pipeline import PRESETS, step_eo_ingest
 
     preset = PRESETS["singapore"]
 
-    with patch("pipeline.src.ingest.eo_gfw.fetch_gfw_detections", return_value=[]) as mock_api:
-        with patch("pipeline.src.ingest.eo_gfw.ingest_eo_records", return_value=0):
+    # Patch directly on the already-imported module object so that the
+    # `from pipeline.src.ingest.eo_gfw import ...` inside step_eo_ingest
+    # reads the patched attribute from sys.modules.
+    with patch.object(eo_mod, "fetch_gfw_detections", return_value=[]) as mock_fetch:
+        with patch.object(eo_mod, "ingest_eo_records", return_value=0):
             result = step_eo_ingest(preset, non_interactive=True)
 
     assert result is True
-    mock_api.assert_called_once()
+    mock_fetch.assert_called_once()
