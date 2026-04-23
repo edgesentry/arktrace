@@ -565,8 +565,11 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
     _step(6, TOTAL_STEPS, "Ingesting GFW EO detections...")
     from pipeline.src.ingest.eo_gfw import fetch_gfw_detections, ingest_eo_records
 
-    token = os.getenv("GFW_API_TOKEN", "")
-    if not token:
+    # Collect GFW_API_TOKEN plus any numbered extras (GFW_API_TOKEN_1/2/3/…).
+    # Multiple tokens allow concurrent reports across sequential pipeline runs.
+    tokens = [t for t in [os.getenv("GFW_API_TOKEN", "")] if t]
+    tokens += [v for k, v in sorted(os.environ.items()) if k.startswith("GFW_API_TOKEN_") and v]
+    if not tokens:
         _ok("GFW_API_TOKEN not set — skipping EO ingest (set token to enable)")
         return True
 
@@ -575,7 +578,7 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
         # fetch_gfw_detections expects (lon_min, lat_min, lon_max, lat_max)
         lat_min, lon_min, lat_max, lon_max = p.bbox
         gfw_bbox = (lon_min, lat_min, lon_max, lat_max)
-        records = fetch_gfw_detections(bbox=gfw_bbox, days=30, api_token=token)
+        records = fetch_gfw_detections(bbox=gfw_bbox, days=30, api_tokens=tokens)
         n = ingest_eo_records(records, db_path=p.db_path)
         _ok(f"{n} EO detections ingested from GFW API")
         return True

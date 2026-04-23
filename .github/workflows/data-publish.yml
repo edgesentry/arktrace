@@ -90,7 +90,9 @@ jobs:
 
       - name: Run pipeline — Japan Sea
         env:
-          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
+          GFW_API_TOKEN_1: ${{ secrets.GFW_API_TOKEN_1 }}
+          GFW_API_TOKEN_2: ${{ secrets.GFW_API_TOKEN_2 }}
+          GFW_API_TOKEN_3: ${{ secrets.GFW_API_TOKEN_3 }}
         run: |
           uv run python scripts/run_pipeline.py \
             --region japan \
@@ -98,7 +100,9 @@ jobs:
 
       - name: Run pipeline — Black Sea
         env:
-          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
+          GFW_API_TOKEN_1: ${{ secrets.GFW_API_TOKEN_1 }}
+          GFW_API_TOKEN_2: ${{ secrets.GFW_API_TOKEN_2 }}
+          GFW_API_TOKEN_3: ${{ secrets.GFW_API_TOKEN_3 }}
         run: |
           uv run python scripts/run_pipeline.py \
             --region blacksea \
@@ -106,7 +110,9 @@ jobs:
 
       - name: Run pipeline — Middle East
         env:
-          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
+          GFW_API_TOKEN_1: ${{ secrets.GFW_API_TOKEN_1 }}
+          GFW_API_TOKEN_2: ${{ secrets.GFW_API_TOKEN_2 }}
+          GFW_API_TOKEN_3: ${{ secrets.GFW_API_TOKEN_3 }}
         run: |
           uv run python scripts/run_pipeline.py \
             --region middleeast \
@@ -114,7 +120,9 @@ jobs:
 
       - name: Run pipeline — Singapore
         env:
-          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
+          GFW_API_TOKEN_1: ${{ secrets.GFW_API_TOKEN_1 }}
+          GFW_API_TOKEN_2: ${{ secrets.GFW_API_TOKEN_2 }}
+          GFW_API_TOKEN_3: ${{ secrets.GFW_API_TOKEN_3 }}
         run: |
           uv run python scripts/run_pipeline.py \
             --region singapore \
@@ -122,7 +130,9 @@ jobs:
 
       - name: Run pipeline — Europe
         env:
-          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
+          GFW_API_TOKEN_1: ${{ secrets.GFW_API_TOKEN_1 }}
+          GFW_API_TOKEN_2: ${{ secrets.GFW_API_TOKEN_2 }}
+          GFW_API_TOKEN_3: ${{ secrets.GFW_API_TOKEN_3 }}
         run: |
           uv run python scripts/run_pipeline.py \
             --region europe \
