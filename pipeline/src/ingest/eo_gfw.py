@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -52,15 +53,21 @@ def fetch_gfw_detections(
     bbox: tuple[float, float, float, float] = DEFAULT_BBOX,
     days: int = 30,
     api_token: str = GFW_API_TOKEN,
+    api_tokens: list[str] | None = None,
 ) -> list[dict]:
     """Fetch vessel presence detections from GFW 4Wings API.
+
+    Pass ``api_tokens`` (list of tokens) to rotate across multiple tokens on
+    429 before falling back to the timed retry.  This lets concurrent pipeline
+    runs share the load without hitting the per-token concurrency limit.
 
     Returns a list of detection dicts with keys:
         detection_id, detected_at, lat, lon, source, confidence
 
     Raises RuntimeError if no token is configured or the request fails.
     """
-    if not api_token:
+    tokens = [t for t in (api_tokens or [api_token]) if t]
+    if not tokens:
         raise RuntimeError(
             "GFW_API_TOKEN not set. Register at https://globalfishingwatch.org/data/vessel-presence/ "
             "and set the token in your .env file, or use --csv for local ingestion."
@@ -118,26 +125,57 @@ def fetch_gfw_detections(
         "Content-Type": "application/json",
     }
 
-    resp = httpx.post(
-        f"{GFW_API_BASE}/4wings/report",
-        params=params,
-        json=body,
-        headers=headers,
-        timeout=180,
-    )
-    if resp.status_code in (401, 403):
-        raise PermissionError(
-            f"GFW API returned {resp.status_code}: token lacks access to "
-            f"public-global-presence:latest. Check your token at "
-            f"https://globalfishingwatch.org/our-apis/tokens"
+    _RETRY_WAIT = 60  # seconds — GFW allows one concurrent report per token
+    _MAX_WAITS = 5
+
+    token_idx = 0
+    wait_count = 0
+
+    while True:
+        current_token = tokens[token_idx % len(tokens)]
+        headers["Authorization"] = f"Bearer {current_token}"
+        resp = httpx.post(
+            f"{GFW_API_BASE}/4wings/report",
+            params=params,
+            json=body,
+            headers=headers,
+            timeout=180,
         )
-    if resp.status_code == 429:
-        raise PermissionError(
-            "GFW API 429: another report is already running for this token — "
-            "wait a few minutes and retry"
-        )
-    if not resp.is_success:
-        raise RuntimeError(f"GFW API {resp.status_code}: {resp.text[:500]}")
+        if resp.status_code in (401, 403):
+            raise PermissionError(
+                f"GFW API returned {resp.status_code}: token lacks access to "
+                f"public-global-presence:latest. Check your token at "
+                f"https://globalfishingwatch.org/our-apis/tokens"
+            )
+        if resp.status_code == 429:
+            next_idx = token_idx + 1
+            if next_idx % len(tokens) != 0:
+                # Try next token before waiting
+                print(
+                    f"  GFW API 429 on token[{token_idx % len(tokens)}] — "
+                    f"trying token[{next_idx % len(tokens)}] ...",
+                    flush=True,
+                )
+                token_idx = next_idx
+                continue
+            # All tokens exhausted — wait before cycling again
+            if wait_count >= _MAX_WAITS:
+                raise PermissionError(
+                    f"GFW API 429: all {len(tokens)} token(s) busy after "
+                    f"{_MAX_WAITS} wait cycles ({_MAX_WAITS * _RETRY_WAIT}s total)"
+                )
+            print(
+                f"  GFW API 429 — all {len(tokens)} token(s) busy; "
+                f"retrying in {_RETRY_WAIT}s (wait {wait_count + 1}/{_MAX_WAITS}) ...",
+                flush=True,
+            )
+            time.sleep(_RETRY_WAIT)
+            token_idx = next_idx
+            wait_count += 1
+            continue
+        if not resp.is_success:
+            raise RuntimeError(f"GFW API {resp.status_code}: {resp.text[:500]}")
+        break
     data = resp.json()
 
     detections = []
