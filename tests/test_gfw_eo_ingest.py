@@ -282,22 +282,18 @@ def test_step_eo_ingest_falls_back_to_api_when_no_parquet(tmp_path, monkeypatch)
 
 
 def test_step_eo_ingest_api_path_returns_true_with_token(tmp_path, monkeypatch):
-    """step_eo_ingest returns True on the live-API path when token is set."""
+    """step_eo_ingest calls the API and returns True when a token is set."""
+    from scripts.run_pipeline import PRESETS, step_eo_ingest
+
     monkeypatch.setenv("ARKTRACE_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("GFW_API_TOKEN", "test-token")
 
-    import pipeline.src.ingest.eo_gfw as eo_mod
-
-    from scripts.run_pipeline import PRESETS, step_eo_ingest
-
     preset = PRESETS["singapore"]
 
-    # Patch directly on the already-imported module object so that the
-    # `from pipeline.src.ingest.eo_gfw import ...` inside step_eo_ingest
-    # reads the patched attribute from sys.modules.
-    with patch.object(eo_mod, "fetch_gfw_detections", return_value=[]) as mock_fetch:
-        with patch.object(eo_mod, "ingest_eo_records", return_value=0):
-            result = step_eo_ingest(preset, non_interactive=True)
+    mock_fetch = MagicMock(return_value=[])
+    # Inject mock_fetch directly via _fetch_fn to bypass lazy-import interception
+    with patch("pipeline.src.ingest.eo_gfw.ingest_eo_records", return_value=0):
+        result = step_eo_ingest(preset, non_interactive=True, _fetch_fn=mock_fetch)
 
     assert result is True
     mock_fetch.assert_called_once()

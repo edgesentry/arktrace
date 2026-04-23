@@ -555,7 +555,11 @@ def step_custom_feeds(p: RegionPreset, non_interactive: bool) -> bool:
         return _ask_retry_skip("custom_feeds") == "skip"
 
 
-def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
+def step_eo_ingest(
+    p: RegionPreset,
+    non_interactive: bool,
+    _fetch_fn=None,  # injected in tests; None → import from eo_gfw at call time
+) -> bool:
     """Ingest GFW EO vessel-presence detections (dark vessels) into eo_detections.
 
     Prefers a pre-fetched parquet produced by scripts/gfw_ingest.py and pulled
@@ -601,13 +605,15 @@ def step_eo_ingest(p: RegionPreset, non_interactive: bool) -> bool:
         return True
 
     try:
-        from pipeline.src.ingest.eo_gfw import fetch_gfw_detections, ingest_eo_records
+        from pipeline.src.ingest.eo_gfw import fetch_gfw_detections as _default_fetch
+        from pipeline.src.ingest.eo_gfw import ingest_eo_records
 
+        fetch = _fetch_fn if _fetch_fn is not None else _default_fetch
         # RegionPreset.bbox = [lat_min, lon_min, lat_max, lon_max]
         # fetch_gfw_detections expects (lon_min, lat_min, lon_max, lat_max)
         lat_min, lon_min, lat_max, lon_max = p.bbox
         gfw_bbox = (lon_min, lat_min, lon_max, lat_max)
-        records = fetch_gfw_detections(bbox=gfw_bbox, days=30, api_tokens=tokens)
+        records = fetch(bbox=gfw_bbox, days=30, api_tokens=tokens)
         n = ingest_eo_records(records, db_path=p.db_path)
         _ok(f"{n} EO detections ingested from GFW API")
         return True
