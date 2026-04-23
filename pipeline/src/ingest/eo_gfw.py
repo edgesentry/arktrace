@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -118,26 +119,39 @@ def fetch_gfw_detections(
         "Content-Type": "application/json",
     }
 
-    resp = httpx.post(
-        f"{GFW_API_BASE}/4wings/report",
-        params=params,
-        json=body,
-        headers=headers,
-        timeout=180,
-    )
-    if resp.status_code in (401, 403):
-        raise PermissionError(
-            f"GFW API returned {resp.status_code}: token lacks access to "
-            f"public-global-presence:latest. Check your token at "
-            f"https://globalfishingwatch.org/our-apis/tokens"
+    _MAX_RETRIES = 5
+    _RETRY_WAIT = 60  # seconds — GFW allows one concurrent report per token
+
+    for attempt in range(_MAX_RETRIES + 1):
+        resp = httpx.post(
+            f"{GFW_API_BASE}/4wings/report",
+            params=params,
+            json=body,
+            headers=headers,
+            timeout=180,
         )
-    if resp.status_code == 429:
-        raise PermissionError(
-            "GFW API 429: another report is already running for this token — "
-            "wait a few minutes and retry"
-        )
-    if not resp.is_success:
-        raise RuntimeError(f"GFW API {resp.status_code}: {resp.text[:500]}")
+        if resp.status_code in (401, 403):
+            raise PermissionError(
+                f"GFW API returned {resp.status_code}: token lacks access to "
+                f"public-global-presence:latest. Check your token at "
+                f"https://globalfishingwatch.org/our-apis/tokens"
+            )
+        if resp.status_code == 429:
+            if attempt == _MAX_RETRIES:
+                raise PermissionError(
+                    f"GFW API 429: another report is still running after "
+                    f"{_MAX_RETRIES} retries ({_MAX_RETRIES * _RETRY_WAIT}s total wait)"
+                )
+            print(
+                f"  GFW API 429 — previous report still running; "
+                f"retrying in {_RETRY_WAIT}s (attempt {attempt + 1}/{_MAX_RETRIES}) ...",
+                flush=True,
+            )
+            time.sleep(_RETRY_WAIT)
+            continue
+        if not resp.is_success:
+            raise RuntimeError(f"GFW API {resp.status_code}: {resp.text[:500]}")
+        break
     data = resp.json()
 
     detections = []
