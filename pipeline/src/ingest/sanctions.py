@@ -59,23 +59,30 @@ def download_opensanctions(
         print(f"  Already downloaded: {out_path}")
         return out_path
 
-    tmp_path = out_path.with_suffix(".tmp")
+    # Use a per-process temp path so concurrent pipeline runs (parallel CI)
+    # don't corrupt each other's in-progress download. The rename is atomic on
+    # the same filesystem; the last writer wins harmlessly.
+    tmp_path = out_path.with_name(f"{out_path.stem}-{os.getpid()}.tmp")
     print(f"  Downloading {url} …")
-    with httpx.Client(timeout=600, follow_redirects=True) as client:
-        with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            total = int(resp.headers.get("content-length", 0))
-            received = 0
-            with open(tmp_path, "wb") as f:
-                for chunk in resp.iter_bytes(chunk_size=65_536):
-                    f.write(chunk)
-                    received += len(chunk)
-                    if total:
-                        pct = received * 100 // total
-                        print(f"\r  {pct}% ({received // 1_048_576} MB)", end="", flush=True)
-    print()
-    tmp_path.rename(out_path)
-    print(f"  Saved: {out_path}")
+    try:
+        with httpx.Client(timeout=600, follow_redirects=True) as client:
+            with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                total = int(resp.headers.get("content-length", 0))
+                received = 0
+                with open(tmp_path, "wb") as f:
+                    for chunk in resp.iter_bytes(chunk_size=65_536):
+                        f.write(chunk)
+                        received += len(chunk)
+                        if total:
+                            pct = received * 100 // total
+                            print(f"\r  {pct}% ({received // 1_048_576} MB)", end="", flush=True)
+        print()
+        tmp_path.rename(out_path)
+        print(f"  Saved: {out_path}")
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
     return out_path
 
 
