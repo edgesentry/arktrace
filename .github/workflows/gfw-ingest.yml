@@ -21,8 +21,52 @@ concurrency:
 
 jobs:
   ingest:
-    name: Fetch GFW EO detections & push to R2
+    name: Fetch ${{ matrix.region }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        region: [singapore, japan, europe, blacksea, middleeast]
+      fail-fast: false
+    env:
+      ARKTRACE_DATA_DIR: data/processed
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --group dev
+
+      - name: Fetch GFW EO detections
+        env:
+          GFW_API_TOKEN_1: ${{ secrets.GFW_API_TOKEN_1 }}
+          GFW_API_TOKEN_2: ${{ secrets.GFW_API_TOKEN_2 }}
+          GFW_API_TOKEN_3: ${{ secrets.GFW_API_TOKEN_3 }}
+        run: |
+          uv run python scripts/gfw_ingest.py \
+            --regions ${{ matrix.region }} \
+            --days 30
+
+      - name: Upload parquet artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gfw-eo-${{ matrix.region }}
+          path: data/processed/${{ matrix.region }}_eo_detections.parquet
+          if-no-files-found: warn
+
+  push:
+    name: Push GFW EO parquets to R2
+    runs-on: ubuntu-latest
+    needs: ingest
+    if: always()
     permissions:
       contents: read
     env:
@@ -40,15 +84,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --group dev
 
-      - name: Fetch GFW EO detections for all active regions
-        env:
-          GFW_API_TOKEN_1: ${{ secrets.GFW_API_TOKEN_1 }}
-          GFW_API_TOKEN_2: ${{ secrets.GFW_API_TOKEN_2 }}
-          GFW_API_TOKEN_3: ${{ secrets.GFW_API_TOKEN_3 }}
-        run: |
-          uv run python scripts/gfw_ingest.py \
-            --regions singapore,japan,europe,blacksea,middleeast \
-            --days 30
+      - name: Download all parquet artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gfw-eo-*
+          path: data/processed
+          merge-multiple: true
 
       - name: Push GFW EO parquets to private R2
         env:
