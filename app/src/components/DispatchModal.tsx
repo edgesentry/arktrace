@@ -58,6 +58,7 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
     style.id = "__dispatch-print-style";
     style.textContent = `
       @media print {
+        @page { margin: 18mm 16mm; }
         body > *:not(#dispatch-print-root) { display: none !important; }
         #dispatch-print-root {
           position: static !important;
@@ -67,17 +68,21 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
           background: white !important;
           border: none !important;
           box-shadow: none !important;
-          padding: 2rem !important;
-          font-family: system-ui, sans-serif !important;
-          color: black !important;
+          padding: 0 !important;
+          font-family: system-ui, -apple-system, sans-serif !important;
+          color: #111 !important;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
         }
         #dispatch-print-root * {
-          color: black !important;
-          background: transparent !important;
-          border-color: #ccc !important;
+          color: inherit !important;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
         }
+        #dispatch-print-header { display: block !important; }
         #dispatch-print-footer { display: none !important; }
       }
+      #dispatch-print-header { display: none; }
     `;
     document.head.appendChild(style);
     return () => {
@@ -222,6 +227,19 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
 
         {/* Body */}
         <div style={{ overflowY: "auto", padding: "0.85rem 1rem", flex: 1 }}>
+
+          {/* Print-only header — hidden on screen */}
+          <div id="dispatch-print-header" style={{ marginBottom: "1.2rem", paddingBottom: "0.75rem", borderBottom: "2px solid #111" }}>
+            <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "#555", marginBottom: "0.2rem" }}>
+              Arktrace · Dispatch Brief
+            </div>
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#111" }}>
+              {vessel.vessel_name || vessel.mmsi}
+            </div>
+            <div style={{ fontSize: "0.72rem", color: "#555", marginTop: "0.2rem" }}>
+              MMSI {vessel.mmsi}{vessel.imo ? ` · IMO ${vessel.imo}` : ""} · Generated {new Date().toISOString().replace("T", " ").slice(0, 19)} UTC
+            </div>
+          </div>
 
           {/* Confidence */}
           <div style={{ marginBottom: "0.75rem" }}>
@@ -371,14 +389,15 @@ export default function DispatchModal({ vessel, brief, conn, onClose }: Props) {
           </button>
           <button
             onClick={() => {
+              const date = new Date().toISOString().slice(0, 10);
               const prev = document.title;
-              document.title = `Patrol Dispatch — ${vessel.vessel_name || vessel.mmsi} (${vessel.mmsi})`;
+              document.title = `dispatch_brief_${vessel.mmsi}_${date}`;
               window.print();
               document.title = prev;
             }}
             style={{ background: "none", border: "1px solid #2d3748", borderRadius: 4, color: "#718096", cursor: "pointer", fontSize: "0.72rem", fontWeight: 600, padding: "0.3rem 0.75rem" }}
           >
-            Print
+            Export PDF
           </button>
           <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "1px solid #2d3748", borderRadius: 4, color: "#4a5568", cursor: "pointer", fontSize: "0.72rem", padding: "0.3rem 0.75rem" }}>
             Close
