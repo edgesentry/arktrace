@@ -94,14 +94,23 @@ echo "   Endpoint  → http://localhost:${PORT}/v1/chat/completions"
 echo "   Press Ctrl+C to stop."
 echo ""
 
-llama-server \
-  --hf-repo "${HF_MODEL}" \
-  --hf-file "${GGUF_FILE}" \
-  --port "${PORT}" \
-  --ctx-size 4096 \
-  --n-gpu-layers "${GPU_LAYERS}" \
-  &
-LLM_PID=$!
+# Reuse an existing llama-server on this port rather than trying to bind
+# a second instance (which exits and takes Caddy down via the trap handler).
+EXISTING_PID=""
+EXISTING_PID=$(lsof -ti ":${PORT}" 2>/dev/null | head -1) || true
+if [[ -n "${EXISTING_PID}" ]]; then
+  echo "   ♻️  llama-server already running on :${PORT} (PID ${EXISTING_PID}) — reusing"
+  LLM_PID="${EXISTING_PID}"
+else
+  llama-server \
+    --hf-repo "${HF_MODEL}" \
+    --hf-file "${GGUF_FILE}" \
+    --port "${PORT}" \
+    --ctx-size 4096 \
+    --n-gpu-layers "${GPU_LAYERS}" \
+    &
+  LLM_PID=$!
+fi
 
 # ── Wait for readiness ─────────────────────────────────────────────────────────
 echo "   Waiting for server to be ready…"
