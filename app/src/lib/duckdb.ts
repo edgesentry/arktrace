@@ -84,6 +84,8 @@ export interface VesselRow {
   last_seen: string | null;
   region: string;
   top_signals: string | null;
+  ais_gap_count_30d: number | null;
+  sts_candidate_count: number | null;
 }
 
 export interface MetricsRow {
@@ -96,30 +98,17 @@ export interface MetricsRow {
  * Expects `watchlist.parquet` to be registered in the DuckDB VFS beforehand
  * via `registerParquet`.
  */
-/** Check whether `imo` column exists in watchlist.parquet (cached per session). */
-let _watchlistHasImo: boolean | null = null;
-async function watchlistHasImo(conn: duckdb.AsyncDuckDBConnection): Promise<boolean> {
-  if (_watchlistHasImo !== null) return _watchlistHasImo;
+/** Check whether a column exists in watchlist.parquet (cached per session). */
+const _watchlistHasCol: Record<string, boolean | null> = {};
+async function watchlistHasCol(conn: duckdb.AsyncDuckDBConnection, col: string): Promise<boolean> {
+  if (_watchlistHasCol[col] != null) return _watchlistHasCol[col]!;
   try {
-    await conn.query("SELECT imo FROM read_parquet('watchlist.parquet') LIMIT 0");
-    _watchlistHasImo = true;
+    await conn.query(`SELECT ${col} FROM read_parquet('watchlist.parquet') LIMIT 0`);
+    _watchlistHasCol[col] = true;
   } catch {
-    _watchlistHasImo = false;
+    _watchlistHasCol[col] = false;
   }
-  return _watchlistHasImo;
-}
-
-/** Check whether `top_signals` column exists in watchlist.parquet (cached per session). */
-let _watchlistHasTopSignals: boolean | null = null;
-async function watchlistHasTopSignals(conn: duckdb.AsyncDuckDBConnection): Promise<boolean> {
-  if (_watchlistHasTopSignals !== null) return _watchlistHasTopSignals;
-  try {
-    await conn.query("SELECT top_signals FROM read_parquet('watchlist.parquet') LIMIT 0");
-    _watchlistHasTopSignals = true;
-  } catch {
-    _watchlistHasTopSignals = false;
-  }
-  return _watchlistHasTopSignals;
+  return _watchlistHasCol[col]!;
 }
 
 export async function queryWatchlist(
@@ -127,9 +116,11 @@ export async function queryWatchlist(
   opts: { minConfidence?: number; regions?: string[] } = {}
 ): Promise<VesselRow[]> {
   const { minConfidence = 0, regions } = opts;
-  const [hasImo, hasTopSignals] = await Promise.all([
-    watchlistHasImo(conn),
-    watchlistHasTopSignals(conn),
+  const [hasImo, hasTopSignals, hasAisGap, hasSts] = await Promise.all([
+    watchlistHasCol(conn, "imo"),
+    watchlistHasCol(conn, "top_signals"),
+    watchlistHasCol(conn, "ais_gap_count_30d"),
+    watchlistHasCol(conn, "sts_candidate_count"),
   ]);
 
   let sql = `
@@ -144,7 +135,9 @@ export async function queryWatchlist(
       last_lon,
       CAST(last_seen AS VARCHAR) AS last_seen,
       region,
-      ${hasTopSignals ? "CAST(top_signals AS VARCHAR) AS top_signals" : "NULL AS top_signals"}
+      ${hasTopSignals ? "CAST(top_signals AS VARCHAR) AS top_signals" : "NULL AS top_signals"},
+      ${hasAisGap ? "CAST(ais_gap_count_30d AS INTEGER) AS ais_gap_count_30d" : "NULL AS ais_gap_count_30d"},
+      ${hasSts ? "CAST(sts_candidate_count AS INTEGER) AS sts_candidate_count" : "NULL AS sts_candidate_count"}
     FROM read_parquet('watchlist.parquet')
     WHERE confidence >= ${minConfidence}
   `;
