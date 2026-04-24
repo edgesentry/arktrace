@@ -406,14 +406,29 @@ def _delete_timestamp(fs, bucket: str, timestamp: str) -> int:
         return 0
 
 
-def _upload_file(fs, local_path: Path, r2_path: str) -> int:
-    with local_path.open("rb") as src:
-        with fs.open_output_stream(r2_path) as dst:
-            total = 0
-            while chunk := src.read(_CHUNK_SIZE):
-                dst.write(chunk)
-                total += len(chunk)
-    return total
+def _upload_file(fs, local_path: Path, r2_path: str, _retries: int = 3) -> int:
+    # R2 occasionally returns InvalidPart during CompleteMultipartUpload — a
+    # transient condition where uploaded parts are not found on completion.
+    # Retry the entire upload from scratch; do not resume partial parts.
+    if _retries < 1:
+        raise ValueError("_retries must be >= 1")
+    for attempt in range(1, _retries + 1):
+        try:
+            with local_path.open("rb") as src:
+                with fs.open_output_stream(r2_path) as dst:
+                    total = 0
+                    while chunk := src.read(_CHUNK_SIZE):
+                        dst.write(chunk)
+                        total += len(chunk)
+            return total
+        except OSError as exc:
+            if "InvalidPart" in str(exc) and attempt < _retries:
+                print(
+                    f"  R2 InvalidPart on attempt {attempt}/{_retries} — retrying upload ...",
+                    flush=True,
+                )
+                continue
+            raise
 
 
 def _download_file(fs, r2_path: str, local_path: Path) -> int:
