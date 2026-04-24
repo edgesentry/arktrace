@@ -7,6 +7,15 @@ name: GFW EO Ingest
 # Triggers:
 #   - Weekly Monday 00:00 UTC (before data-publish at 01:00)
 #   - Manual dispatch
+#
+# Token assignment — GFW allows ONE concurrent report per token, so each
+# parallel job is pinned to a dedicated token to avoid cross-job 429s.
+# With 3 tokens and 5 regions two tokens serve two regions each; those
+# pairs are staggered so both regions don't fire at exactly the same second.
+#
+#   GFW_API_TOKEN_1 → singapore, blacksea
+#   GFW_API_TOKEN_2 → japan, middleeast
+#   GFW_API_TOKEN_3 → europe
 
 on:
   schedule:
@@ -28,7 +37,17 @@ jobs:
       contents: read
     strategy:
       matrix:
-        region: [singapore, japan, europe, blacksea, middleeast]
+        include:
+          - region: singapore
+            token_secret: GFW_API_TOKEN_1
+          - region: japan
+            token_secret: GFW_API_TOKEN_2
+          - region: europe
+            token_secret: GFW_API_TOKEN_3
+          - region: blacksea
+            token_secret: GFW_API_TOKEN_1
+          - region: middleeast
+            token_secret: GFW_API_TOKEN_2
       fail-fast: false
     env:
       ARKTRACE_DATA_DIR: data/processed
@@ -47,9 +66,7 @@ jobs:
 
       - name: Fetch GFW EO detections
         env:
-          GFW_API_TOKEN_1: ${{ secrets.GFW_API_TOKEN_1 }}
-          GFW_API_TOKEN_2: ${{ secrets.GFW_API_TOKEN_2 }}
-          GFW_API_TOKEN_3: ${{ secrets.GFW_API_TOKEN_3 }}
+          GFW_API_TOKEN: ${{ secrets[matrix.token_secret] }}
         run: |
           uv run python scripts/gfw_ingest.py \
             --regions ${{ matrix.region }} \
