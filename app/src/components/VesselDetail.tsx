@@ -508,6 +508,10 @@ export default function VesselDetail({ vessel, conn, onClose, onReviewSaved }: P
               "Position",
               `${vessel.last_lat.toFixed(4)}°, ${vessel.last_lon.toFixed(4)}°`
             )}
+          {vessel.ais_gap_count_30d != null &&
+            row("AIS gaps (30d)", vessel.ais_gap_count_30d)}
+          {vessel.sts_candidate_count != null &&
+            row("STS candidates", vessel.sts_candidate_count)}
         </tbody>
       </table>
 

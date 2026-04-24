@@ -36,6 +36,8 @@ const BASE_VESSEL: VesselRow = {
   last_lon: 103.8198,
   confidence: 0.87,
   top_signals: null,
+  ais_gap_count_30d: null,
+  sts_candidate_count: null,
 };
 
 const SIGNALS: ShapSignal[] = [
