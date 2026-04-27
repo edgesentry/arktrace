@@ -49,13 +49,22 @@ describe("checkPrivateAuth — cloudflare-access", () => {
   it("returns email from /whoami when authenticated", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
+      type: "basic",
       json: async () => ({ email: "user@example.com" }),
     }));
     expect(await checkPrivateAuth(CF_CONFIG)).toBe("user@example.com");
     expect(fetch).toHaveBeenCalledWith(
       "https://worker.example.com/whoami",
-      { credentials: "include" }
+      { credentials: "include", redirect: "manual" }
     );
+  });
+
+  it("returns null on opaqueredirect (CF Access login redirect — user not logged in)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      type: "opaqueredirect",
+    }));
+    expect(await checkPrivateAuth(CF_CONFIG)).toBeNull();
   });
 
   it("returns null when /whoami returns empty email", async () => {
