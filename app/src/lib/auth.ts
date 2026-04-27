@@ -28,12 +28,18 @@ export async function checkPrivateAuth(config: AppConfig): Promise<string | null
     }
   }
 
-  // cloudflare-access: probe /whoami on the Worker domain
+  // cloudflare-access: probe /whoami on the Worker domain.
+  // redirect: 'manual' prevents the browser from following CF Access's
+  // cross-origin login redirect, which would send Origin: null and trigger
+  // a CORS error. An opaqueredirect response means the user is not logged in.
   const origin = privateOrigin(config);
   if (!origin) return null;
   try {
-    const resp = await fetch(`${origin}/whoami`, { credentials: "include" });
-    if (!resp.ok) return null;
+    const resp = await fetch(`${origin}/whoami`, {
+      credentials: "include",
+      redirect: "manual",
+    });
+    if (resp.type === "opaqueredirect" || !resp.ok) return null;
     const { email } = (await resp.json()) as { email: string };
     return email || null;
   } catch {
