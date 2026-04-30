@@ -8,14 +8,10 @@ name: GFW EO Ingest
 #   - Manual dispatch
 #   - Weekly schedule disabled — trigger manually when needed
 #
-# Token assignment — GFW allows ONE concurrent report per token, so each
-# parallel job is pinned to a dedicated token to avoid cross-job 429s.
-# With 3 tokens and 5 regions two tokens serve two regions each; those
-# pairs are staggered so both regions don't fire at exactly the same second.
-#
-#   GFW_API_TOKEN_1 → singapore, blacksea
-#   GFW_API_TOKEN_2 → japan, middleeast
-#   GFW_API_TOKEN_3 → europe
+# Serial execution: all regions are fetched sequentially in one job with a
+# 30 s inter-region delay to avoid exhausting the shared account-level quota.
+# The previous parallel matrix design (one job per region) fired all regions
+# at once and caused sustained 429s across all tokens. See #530 for context.
 
 on:
   workflow_dispatch:
@@ -27,28 +23,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ingest:
-    name: Fetch ${{ matrix.region }}
+  ingest-and-push:
+    name: Fetch GFW EO detections & push to R2
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: read
-    strategy:
-      # Secrets cannot be referenced in matrix values — use token_num (1/2/3)
-      # and resolve the actual secret in the step env block below.
-      matrix:
-        include:
-          - region: singapore
-            token_num: 1
-          - region: japan
-            token_num: 2
-          - region: europe
-            token_num: 3
-          - region: blacksea
-            token_num: 1
-          - region: middleeast
-            token_num: 2
-      fail-fast: false
     env:
       ARKTRACE_DATA_DIR: data/processed
 
@@ -64,49 +44,20 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --group dev
 
-      - name: Fetch GFW EO detections
+      - name: Fetch GFW EO detections (serial, 30 s delay between regions)
         env:
-          GFW_API_TOKEN: ${{ matrix.token_num == 1 && secrets.GFW_API_TOKEN_1 || matrix.token_num == 2 && secrets.GFW_API_TOKEN_2 || secrets.GFW_API_TOKEN_3 }}
+          GFW_API_TOKEN_1: ${{ secrets.GFW_API_TOKEN_1 }}
+          GFW_API_TOKEN_2: ${{ secrets.GFW_API_TOKEN_2 }}
+          GFW_API_TOKEN_3: ${{ secrets.GFW_API_TOKEN_3 }}
         run: |
-          uv run python scripts/gfw_ingest.py \
-            --regions ${{ matrix.region }} \
-            --days 30
-
-      - name: Upload parquet artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: gfw-eo-${{ matrix.region }}
-          path: data/processed/${{ matrix.region }}_eo_detections.parquet
-          if-no-files-found: warn
-
-  push:
-    name: Push GFW EO parquets to R2
-    runs-on: ubuntu-latest
-    needs: ingest
-    if: always()
-    permissions:
-      contents: read
-    env:
-      ARKTRACE_DATA_DIR: data/processed
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: uv sync --all-extras --group dev
-
-      - name: Download all parquet artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: gfw-eo-*
-          path: data/processed
-          merge-multiple: true
+          for region in singapore japan europe blacksea middleeast; do
+            echo "--- fetching $region ---"
+            uv run python scripts/gfw_ingest.py \
+              --regions "$region" \
+              --days 30
+            echo "--- $region done, sleeping 30s ---"
+            sleep 30
+          done
 
       - name: Push GFW EO parquets to private R2
         env:
