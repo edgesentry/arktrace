@@ -4,7 +4,7 @@ Ownership graph feature engineering.
 Queries the Lance Graph datasets for graph-based risk features.
 
 Output columns (one row per MMSI):
-    mmsi, sanctions_distance, cluster_sanctions_ratio,
+    mmsi, sanctions_distance (0/1/2/3/99), cluster_sanctions_ratio,
     shared_manager_risk, shared_address_centrality, sts_hub_degree
 
 Usage:
@@ -36,6 +36,7 @@ def _compute_sanctions_distance(tables: dict) -> pl.DataFrame:
     0 = vessel directly sanctioned
     1 = owner or manager is sanctioned
     2 = parent company (via CONTROLLED_BY) is sanctioned
+    3 = grandparent / UBO level (CONTROLLED_BY × 2) is sanctioned
     99 = no sanctions connection
     """
     vessels = pl.from_arrow(tables["Vessel"]).select("mmsi")
@@ -69,17 +70,39 @@ def _compute_sanctions_distance(tables: dict) -> pl.DataFrame:
 
     # 2-hop: vessel → company → (CONTROLLED_BY) → sanctioned parent
     two_hop: set[str] = set()
-    if len(cb) and len(ob or mb):
+    if len(cb) and (len(ob) or len(mb)):
         sanctioned_parents = set(
             cb.filter(pl.col("dst_id").is_in(sanctioned_ids))["src_id"].to_list()
         )
-        if sanctioned_parents and (len(ob) or len(mb)):
+        if sanctioned_parents:
             two_hop_vessels = (
                 vessel_companies.filter(pl.col("dst_id").is_in(sanctioned_parents))["src_id"]
                 .unique()
                 .to_list()
             )
             two_hop = set(two_hop_vessels)
+
+    # 3-hop: vessel → company → parent → (CONTROLLED_BY) → sanctioned grandparent (UBO level)
+    three_hop: set[str] = set()
+    if len(cb) and (len(ob) or len(mb)):
+        # Companies one CONTROLLED_BY step away from sanctioned entities
+        sanctioned_grandparents = set(
+            cb.filter(pl.col("dst_id").is_in(sanctioned_ids))["src_id"].to_list()
+        )
+        # Companies two CONTROLLED_BY steps away (grandparent chain)
+        if sanctioned_grandparents:
+            sanctioned_via_grandparent = set(
+                cb.filter(pl.col("dst_id").is_in(sanctioned_grandparents))["src_id"].to_list()
+            )
+            if sanctioned_via_grandparent:
+                three_hop_vessels = (
+                    vessel_companies.filter(
+                        pl.col("dst_id").is_in(sanctioned_via_grandparent)
+                    )["src_id"]
+                    .unique()
+                    .to_list()
+                )
+                three_hop = set(three_hop_vessels)
 
     rows = []
     for mmsi in vessels["mmsi"].to_list():
@@ -89,6 +112,8 @@ def _compute_sanctions_distance(tables: dict) -> pl.DataFrame:
             dist = 1
         elif mmsi in two_hop:
             dist = 2
+        elif mmsi in three_hop:
+            dist = 3
         else:
             dist = MAX_HOPS
         rows.append({"mmsi": mmsi, "sanctions_distance": dist})

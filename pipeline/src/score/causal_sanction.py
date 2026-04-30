@@ -238,9 +238,9 @@ def _identify_treatment_groups(
     """
     Return (treated_mmsis, control_mmsis) for a given regime.
 
-    Treated : sanctions_distance ≤ 2 AND vessel in Neo4j graph connected to
+    Treated : sanctions_distance ≤ 3 AND vessel in Neo4j graph connected to
               a sanctions_entities row whose list_source contains the regime
-              substring.
+              substring (distance 3 = UBO / grandparent level).
 
     Control : sanctions_distance = 99 (no graph link to any sanctioned entity).
 
@@ -257,7 +257,7 @@ def _identify_treatment_groups(
             SELECT DISTINCT vf.mmsi
             FROM vessel_features vf
             JOIN vessel_meta vm ON vm.mmsi = vf.mmsi
-            WHERE vf.sanctions_distance <= 2
+            WHERE vf.sanctions_distance <= 3
             """,
         ).fetchall()
         treated = [r[0] for r in treated_rows]
