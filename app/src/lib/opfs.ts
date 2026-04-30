@@ -66,12 +66,31 @@ export type SyncStatus =
   | { phase: "fetching_manifest" }
   | { phase: "syncing"; done: number; total: number; current: string }
   | { phase: "loading" }
-  | { phase: "ready"; filesLoaded: number; fromCache: boolean; fromFixtures?: boolean; oldestCacheDate?: string }
+  | { phase: "ready"; filesLoaded: number; fromCache: boolean; fromFixtures?: boolean; oldestCacheDate?: string; noCache?: boolean }
   | { phase: "error"; message: string };
 
 // ---------------------------------------------------------------------------
 // OPFS helpers
 // ---------------------------------------------------------------------------
+
+let _opfsAvailable: boolean | null = null;
+
+/** Returns false in Safari Private mode (OPFS writes throw UnknownError). */
+async function isOpfsAvailable(): Promise<boolean> {
+  if (_opfsAvailable !== null) return _opfsAvailable;
+  try {
+    const root = await navigator.storage.getDirectory();
+    const fh = await root.getFileHandle("__opfs_probe__", { create: true });
+    const w = await fh.createWritable();
+    await w.write(new Uint8Array([0]));
+    await w.close();
+    await root.removeEntry("__opfs_probe__");
+    _opfsAvailable = true;
+  } catch {
+    _opfsAvailable = false;
+  }
+  return _opfsAvailable;
+}
 
 async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
   return navigator.storage.getDirectory();
@@ -219,8 +238,17 @@ export async function syncAndLoad(
     : manifest.files
   ).filter((f) => !f.private || privateAuth);
 
+  const opfsOk = await isOpfsAvailable();
+  // When OPFS is unavailable (e.g. Safari Private), hold downloaded buffers in
+  // memory so they can still be registered with DuckDB in step 3.
+  const memCache = new Map<string, ArrayBuffer>();
+
   const toDownload: ManifestFile[] = [];
   for (const f of wantedFiles) {
+    if (!opfsOk) {
+      toDownload.push(f);
+      continue;
+    }
     const [cachedSize, meta] = await Promise.all([
       opfsFileSize(f.register_as),
       opfsReadMeta(f.register_as),
@@ -252,30 +280,38 @@ export async function syncAndLoad(
       const resp = await fetch(fetchUrl, fetchOpts);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const buf = await resp.arrayBuffer();
-      await opfsWriteBuffer(f.register_as, buf);
-      await opfsWriteMeta(f.register_as, { downloaded_at: downloadedAt });
+      if (opfsOk) {
+        await opfsWriteBuffer(f.register_as, buf);
+        await opfsWriteMeta(f.register_as, { downloaded_at: downloadedAt });
+      } else {
+        memCache.set(f.register_as, buf);
+      }
     } catch (err) {
       console.warn(`[opfs] Failed to download ${f.url}:`, err);
     }
     done++;
   }
 
-  // ── 3. Load all wanted files into DuckDB-WASM from OPFS ────────────────
+  // ── 3. Load all wanted files into DuckDB-WASM ──────────────────────────
   onStatus({ phase: "loading" });
   let loaded = 0;
   let oldestCacheDate: string | undefined;
   for (const f of wantedFiles) {
-    const buf = await opfsReadBuffer(f.register_as);
+    const buf = opfsOk
+      ? await opfsReadBuffer(f.register_as)
+      : (memCache.get(f.register_as) ?? null);
     if (!buf) continue;
     await registerParquet(db, f.register_as, buf);
     loaded++;
-    const meta = await opfsReadMeta(f.register_as);
-    if (meta && (!oldestCacheDate || meta.downloaded_at < oldestCacheDate)) {
-      oldestCacheDate = meta.downloaded_at;
+    if (opfsOk) {
+      const meta = await opfsReadMeta(f.register_as);
+      if (meta && (!oldestCacheDate || meta.downloaded_at < oldestCacheDate)) {
+        oldestCacheDate = meta.downloaded_at;
+      }
     }
   }
 
-  onStatus({ phase: "ready", filesLoaded: loaded, fromCache: done === 0, oldestCacheDate });
+  onStatus({ phase: "ready", filesLoaded: loaded, fromCache: done === 0, oldestCacheDate, noCache: !opfsOk });
   return loaded;
 }
 

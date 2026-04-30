@@ -96,6 +96,8 @@ export default function SyncStatusBar({ status, onSync }: Props) {
         ✓ {status.filesLoaded} file{status.filesLoaded !== 1 ? "s" : ""} loaded
         {status.fromFixtures
           ? " (demo fixtures — sync for live data)"
+          : status.noCache
+          ? " (in-memory only · re-sync required after reload)"
           : status.fromCache
           ? ` (from OPFS cache${ageLabel})`
           : ` (synced from R2${ageLabel})`}
