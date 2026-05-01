@@ -948,8 +948,8 @@ def cmd_merge_reviews(args: argparse.Namespace) -> int:
     uploads the result to ``reviews/merged/reviews.parquet``.  Also merges
     ``audit.parquet`` and ``briefs.parquet`` (union-distinct, no per-key dedup).
     """
-    import pyarrow.fs as pafs
     import duckdb as _duckdb
+    import pyarrow.fs as pafs
 
     bucket = os.getenv("S3_BUCKET", _DEFAULT_BUCKET)
     fs = _build_r2_fs()
@@ -963,15 +963,16 @@ def cmd_merge_reviews(args: argparse.Namespace) -> int:
 
     def _user_files(suffix: str) -> list[str]:
         return [
-            i.path for i in infos
+            i.path
+            for i in infos
             if i.type == pafs.FileType.File
             and i.path.endswith(f"/{suffix}")
             and "/merged/" not in i.path
         ]
 
     reviews_paths = _user_files("reviews.parquet")
-    audit_paths   = _user_files("audit.parquet")
-    briefs_paths  = _user_files("briefs.parquet")
+    audit_paths = _user_files("audit.parquet")
+    briefs_paths = _user_files("briefs.parquet")
 
     if not reviews_paths:
         print("No per-user reviews found in R2 — nothing to merge.")
@@ -981,6 +982,7 @@ def cmd_merge_reviews(args: argparse.Namespace) -> int:
 
     tmp_downloads: list[Path] = []
     try:
+
         def _fetch_all(r2_paths: list[str]) -> list[Path]:
             result = []
             for r2_path in r2_paths:
@@ -992,8 +994,8 @@ def cmd_merge_reviews(args: argparse.Namespace) -> int:
             return result
 
         reviews_local = _fetch_all(reviews_paths)
-        audit_local   = _fetch_all(audit_paths)
-        briefs_local  = _fetch_all(briefs_paths)
+        audit_local = _fetch_all(audit_paths)
+        briefs_local = _fetch_all(briefs_paths)
 
         def _merge_newest(local_files: list[Path], key: str, order_col: str) -> tuple[Path, int]:
             """Union files; keep newest order_col per key. Returns (tmp_path, row_count)."""
