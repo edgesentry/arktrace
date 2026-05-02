@@ -89,6 +89,14 @@ def init_schema(db_path: str = DEFAULT_DB_PATH) -> None:
             )
         """)
         con.execute("""
+            CREATE TABLE IF NOT EXISTS equasis_vessel_ref (
+                imo         VARCHAR PRIMARY KEY,
+                vessel_type TINYINT,
+                build_year  SMALLINT,
+                scrapped    BOOLEAN DEFAULT FALSE
+            )
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS trade_flow (
                 reporter        VARCHAR NOT NULL,
                 partner         VARCHAR NOT NULL,
