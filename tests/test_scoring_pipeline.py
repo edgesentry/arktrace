@@ -186,7 +186,12 @@ def test_chokepoint_features_in_anomaly_feature_columns():
 
 def test_new_features_in_feature_value_columns():
     """All four new features must appear in SHAP signal attribution."""
-    for col in ("imo_type_mismatch", "imo_scrapped_flag", "chokepoint_exit_gap_count", "ais_pre_gap_regularity"):
+    for col in (
+        "imo_type_mismatch",
+        "imo_scrapped_flag",
+        "chokepoint_exit_gap_count",
+        "ais_pre_gap_regularity",
+    ):
         assert col in FEATURE_VALUE_COLUMNS, f"{col} missing from FEATURE_VALUE_COLUMNS"
 
 
