@@ -34,7 +34,7 @@ type StepStatus = "idle" | "loading" | "done" | "offline" | "error";
 
 // ── Prompt builders ───────────────────────────────────────────────────────────
 
-function vesselContext(v: VesselRow): string {
+export function vesselContext(v: VesselRow): string {
   const signals = (() => {
     try {
       const parsed = JSON.parse(v.top_signals ?? "[]");
@@ -67,7 +67,7 @@ function vesselContext(v: VesselRow): string {
     .join("\n");
 }
 
-const TRIAGE_SYSTEM =
+export const TRIAGE_SYSTEM =
   "You are a maritime threat analyst. You will receive structured vessel data. " +
   "Your task: identify the top 3 evasion indicators. " +
   "STRICT CONSTRAINTS: " +
@@ -76,11 +76,11 @@ const TRIAGE_SYSTEM =
   "- Only reference fields present in the vessel data. " +
   "- No markdown, no headers, no extra text before or after the list.";
 
-function triagePrompt(v: VesselRow): string {
+export function triagePrompt(v: VesselRow): string {
   return `Identify the top 3 evasion indicators for this vessel.\n\n${vesselContext(v)}`;
 }
 
-const SYNTHESIS_SYSTEM =
+export const SYNTHESIS_SYSTEM =
   "You are a maritime intelligence analyst. You will receive structured vessel data and " +
   "OSINT notes gathered by the analyst. " +
   "Your task: synthesise both into a threat assessment. " +
@@ -91,7 +91,7 @@ const SYNTHESIS_SYSTEM =
   "- Do NOT invent facts not present in the provided data or OSINT notes. " +
   "- Plain text only, no markdown.";
 
-function synthesisPrompt(v: VesselRow, notes: string): string {
+export function synthesisPrompt(v: VesselRow, notes: string): string {
   return (
     `Synthesise the vessel data and OSINT findings into a 2-sentence threat assessment.\n\n` +
     `--- VESSEL DATA ---\n${vesselContext(v)}\n\n` +
@@ -99,7 +99,7 @@ function synthesisPrompt(v: VesselRow, notes: string): string {
   );
 }
 
-const BRIEFING_SYSTEM =
+export const BRIEFING_SYSTEM =
   "You are a maritime intelligence analyst writing a briefing for a government audience. " +
   "You will receive vessel data and a threat assessment. " +
   "Your task: draft a 3-sentence briefing note. " +
@@ -110,7 +110,7 @@ const BRIEFING_SYSTEM =
   "- Sentence 3: recommended action (monitor / escalate / cross-reference with named agency). " +
   "- Plain text only, no markdown, no bullet points.";
 
-function briefingPrompt(v: VesselRow, synthesis: string): string {
+export function briefingPrompt(v: VesselRow, synthesis: string): string {
   return (
     `Draft a 3-sentence briefing note for a DSTA/MPA audience.\n\n` +
     `--- VESSEL DATA ---\n${vesselContext(v)}\n\n` +
@@ -147,7 +147,7 @@ async function callLLM(
 
 // ── OSINT links ───────────────────────────────────────────────────────────────
 
-function osintLinks(v: VesselRow) {
+export function osintLinks(v: VesselRow) {
   const links: { label: string; url: string }[] = [
     {
       label: "MarineTraffic (MMSI)",
@@ -180,7 +180,7 @@ function osintLinks(v: VesselRow) {
 
 // ── Markdown export ───────────────────────────────────────────────────────────
 
-function toMarkdown(v: VesselRow, session: Partial<InvestigationSession>): string {
+export function toMarkdown(v: VesselRow, session: Partial<InvestigationSession>): string {
   const name = v.vessel_name && v.vessel_name !== v.mmsi ? v.vessel_name : v.mmsi;
   const date = new Date().toISOString().slice(0, 10);
   const lines = [
