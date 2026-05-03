@@ -278,7 +278,9 @@ export async function queryStatelessVessels(
     watchlistHasCol(conn, "sts_candidate_count"),
   ]);
 
-  const allocatedList = [...ALLOCATED_MIDS].join(",");
+  // Use string comparison to avoid TRY_CAST compatibility issues with DuckDB-WASM.
+  // Vessel MMSIs start with 2-7; 0xx/1xx are coast stations, 8xx/9xx are nav aids.
+  const allocatedList = [...ALLOCATED_MIDS].map((n) => `'${String(n).padStart(3, "0")}'`).join(",");
   const sql = `
     SELECT
       mmsi,
@@ -296,8 +298,8 @@ export async function queryStatelessVessels(
       ${hasSts ? "CAST(sts_candidate_count AS INTEGER) AS sts_candidate_count" : "NULL AS sts_candidate_count"}
     FROM read_parquet('watchlist.parquet')
     WHERE LENGTH(mmsi) = 9
-      AND TRY_CAST(LEFT(mmsi, 1) AS INTEGER) BETWEEN 2 AND 7
-      AND TRY_CAST(LEFT(mmsi, 3) AS INTEGER) NOT IN (${allocatedList})
+      AND LEFT(mmsi, 1) BETWEEN '2' AND '7'
+      AND LEFT(mmsi, 3) NOT IN (${allocatedList})
     ORDER BY confidence DESC
   `;
   const result = await conn.query(sql);
