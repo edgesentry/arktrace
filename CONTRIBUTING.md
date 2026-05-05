@@ -40,9 +40,10 @@ All files under `docs/` use `kebab-case.md`. Use role prefixes:
 
 | Prefix | Use for |
 |---|---|
-| `feature-` | Specific product feature (e.g. `feature-backtracking.md`) |
+| `ref-` | Reference material: architecture, background, design decisions, algorithms |
+| `feature-` | Feature use cases and workflows (e.g. `feature-scenarios.md`) |
 | `ui-` | UI/UX specifications (e.g. `ui-personas.md`) |
-| `integration-` | External system integration specs |
+| `integration-` | External system integration specs (e.g. `integration-custom-feeds.md`) |
 
 ### Skill-first policy
 

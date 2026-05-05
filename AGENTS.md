@@ -19,7 +19,7 @@ Shadow fleet candidate screening application. Consumes edgesentry-rs primitives;
 | `scripts/` | Operator CLI: `run_pipeline.py`, `sync_r2.py`, `run_operations_shell.sh` |
 | `data/processed/` | DuckDB files, Parquet outputs, Lance Graph datasets (gitignored) |
 | `tests/` | Pipeline unit and integration tests |
-| `docs/` | Architecture, background, scenarios, LLM grounding, roadmap |
+| `docs/` | Reference docs (`ref-`), use-case scenarios (`feature-`), integration specs (`integration-`), UI specs (`ui-`) |
 
 ## Key files
 
@@ -42,11 +42,12 @@ Conventional Commits (`fix:`, `feat:`, `feat!:`)
 
 ## Docs
 
-- Architecture and data flow: `docs/architecture.md`
-- Problem context: `docs/background.md`
-- Tech stack and algorithms: `docs/technical-solution.md`
-- LLM anti-hallucination design: `docs/llm-grounding.md`
-- Use case flows: `docs/scenarios.md`
+- Pipeline and data flow design: `docs/ref-architecture.md`
+- Problem context and shadow fleet background: `docs/ref-background.md`
+- Tech stack, algorithms, data sources: `docs/ref-technical-solution.md`
+- LLM anti-hallucination design: `docs/ref-llm-grounding.md`
+- End-to-end use case flows: `docs/feature-scenarios.md`
+- Custom AIS/data feed integration: `docs/integration-custom-feeds.md`
 - Roadmap: `docs/roadmap/index.md`
 
 ## Agent Skills
@@ -57,9 +58,9 @@ npx skills add edgesentry/arktrace
 
 | Skill | Trigger |
 |---|---|
-| `/arktrace-run-pipeline` | Scoring a region; refreshing the watchlist; when pipeline step fails |
-| `/arktrace-run-dashboard` | Developing the React frontend; verifying UI changes locally |
-| `/arktrace-run-tests` | Before committing; when CI fails on pytest or eslint |
-| `/arktrace-deploy` | Setting up Cloudflare Pages, R2, or CI; updating production config |
-| `/arktrace-llm-setup` | Configuring LLM provider (OpenAI / Ollama / llama.cpp) |
-| `/arktrace-demo-data` | Need sample data without running the full pipeline |
+| `/arktrace-run-pipeline` | When asked to "update the watchlist" or "score vessels for a region"; when `candidate_watchlist.parquet` is stale; when a pipeline step fails mid-run |
+| `/arktrace-run-dashboard` | When developing or debugging the React frontend; when verifying a UI change locally; when `npm run dev` output is needed |
+| `/arktrace-run-tests` | Before every commit; when CI fails on `pytest` or `eslint`; after modifying pipeline scoring logic or frontend components |
+| `/arktrace-deploy` | When setting up Cloudflare Pages or R2 for a new environment; when updating production env vars or CI publish job |
+| `/arktrace-llm-setup` | When Dispatch Brief generation is failing; when switching from OpenAI to a local model; when `LLM_PROVIDER` is not set |
+| `/arktrace-demo-data` | When `data/processed/` is empty and the full pipeline cannot be run; when demoing to a reviewer without credentials |

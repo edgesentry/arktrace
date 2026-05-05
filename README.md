@@ -20,7 +20,7 @@ uv run python scripts/run_pipeline.py --region singapore --non-interactive
 Applies Difference-in-Differences (DiD) causal modelling to identify vessels whose behaviour changed *because of* a sanction event — not merely anomalous vessels. Two-phase architecture:
 
 1. **Deterministic scoring pipeline** — AIS features, Isolation Forest, HDBSCAN, ownership graph risk, DiD causal model, SHAP attribution. No LLM.
-2. **Bounded text synthesis** — browser generates plain-language patrol briefs via a local LLM with strict anti-hallucination constraints. LLM cannot modify scores or access external data. See [docs/llm-grounding.md](docs/llm-grounding.md).
+2. **Bounded text synthesis** — browser generates plain-language patrol briefs via a local LLM with strict anti-hallucination constraints. LLM cannot modify scores or access external data. See [docs/ref-llm-grounding.md](docs/ref-llm-grounding.md).
 
 **Validated metrics (blind run, singapore, 2026-04-14):**
 
