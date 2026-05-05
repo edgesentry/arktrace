@@ -1,6 +1,21 @@
 # AGENTS
 
-Shadow fleet candidate screening application. Consumes edgesentry-rs primitives; business logic lives here, not in edgesentry-rs.
+Shadow fleet candidate screening application. Consumes edgesentry-rs primitives and indago data; domain-specific business logic lives here.
+
+## External dependency map
+
+Before modifying scoring logic or debugging unexpected scores, identify which layer owns the problem:
+
+| Symptom | Likely owner | Where to look |
+|---|---|---|
+| Wrong distance / TTC / zone membership | edgesentry-rs physics engine | `crates/edgesentry-compute/` in edgesentry-rs |
+| AuditRecord fails to verify | edgesentry-rs audit chain | `crates/edgesentry-audit/` in edgesentry-rs |
+| AIS feature values wrong (gap counts, STS, loitering) | indago feature pipeline | `pipelines/features/ais_behavior.py` in indago |
+| Ownership graph distance wrong | indago identity pipeline | `pipelines/features/identity.py` in indago |
+| Composite score unexpected | this repo scoring engine | `pipeline/src/score/composite.py` |
+| SHAP attribution wrong | this repo SHAP layer | `pipeline/src/score/composite.py` |
+| Parquet schema mismatch | indago → arktrace contract | `indago` R2 bucket schema; `pipeline/src/ingest/schema.py` |
+| Dashboard renders wrong data | this repo React SPA | `app/src/` |
 
 ## Directory map
 
